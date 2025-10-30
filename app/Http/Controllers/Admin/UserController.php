@@ -85,14 +85,12 @@ class UserController extends Controller
     {
         $this->checkPermission(self::READ_PERMISSION);
 
-        //QUERY ALL REFERRALS A USER HAS
-        //i am not proud of this at all.
-        $allReferals = [];
-        $referrals = DB::table('user_referrals')->where('referral_id', '=', $user->id)->get();
-        foreach ($referrals as $referral) {
-            array_push($allReferals, $allReferals['id'] = User::query()->findOrFail($referral->registered_user_id));
-        }
-        array_pop($allReferals);
+        // QUERY ALL REFERRALS A USER HAS - optimized with single query
+        $referredUserIds = DB::table('user_referrals')
+            ->where('referral_id', '=', $user->id)
+            ->pluck('registered_user_id');
+        
+        $allReferals = User::whereIn('id', $referredUserIds)->get();
 
         return view('admin.users.show')->with([
             'user' => $user,
@@ -362,21 +360,10 @@ class UserController extends Controller
         if(!$roles){
             $users = $all ? User::where('suspended', false)->get() : User::whereIn('id', $data['users'])->get();
         } else{
-            // Initialize an empty collection to hold users from all roles
-            $users = collect();
-
-            // Loop through each role ID and fetch users
-            foreach ($data["roles"] as $roleId) {
-                $roleUsers = User::whereHas('roles', function ($query) use ($roleId) {
-                    $query->where('id', $roleId);
-                })->get();
-
-                // Merge users from this role into the main collection
-                $users = $users->merge($roleUsers);
-            }
-
-            // Remove duplicate users (if any)
-            $users = $users->unique('id');
+            // Optimized: Fetch all users with the specified roles in a single query
+            $users = User::whereHas('roles', function ($query) use ($data) {
+                $query->whereIn('id', $data['roles']);
+            })->distinct()->get();
         }
 
 

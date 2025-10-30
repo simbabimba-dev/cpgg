@@ -219,23 +219,28 @@ class ServerController extends Controller
 
     public function syncServers()
     {
-        $CPServers = Server::get();
+        // Load all servers at once and key by pterodactyl_id for efficient lookup
+        $CPServers = Server::all()->keyBy('pterodactyl_id');
 
         $CPIDArray = [];
         $renameCount = 0;
-        foreach ($CPServers as $CPServer) { //go thru all CP servers and make array with IDs as keys. All values are false.
-            if ($CPServer->pterodactyl_id) {
-                $CPIDArray[$CPServer->pterodactyl_id] = false;
+        
+        // Build pterodactyl ID array
+        foreach ($CPServers as $pteroId => $CPServer) {
+            if ($pteroId) {
+                $CPIDArray[$pteroId] = false;
             }
         }
 
-        foreach ($this->pterodactyl->getServers() as $server) { //go thru all ptero servers, if server exists, change value to true in array.
-            if (isset($CPIDArray[$server['attributes']['id']])) {
-                $CPIDArray[$server['attributes']['id']] = true;
+        foreach ($this->pterodactyl->getServers() as $server) {
+            $pteroId = $server['attributes']['id'];
+            
+            if (isset($CPIDArray[$pteroId])) {
+                $CPIDArray[$pteroId] = true;
 
-                if (isset($server['attributes']['name'])) { //failsafe
-                    //Check if a server got renamed
-                    $savedServer = Server::query()->where('pterodactyl_id', $server['attributes']['id'])->first();
+                if (isset($server['attributes']['name'])) {
+                    // Check if a server got renamed - use the already loaded server
+                    $savedServer = $CPServers[$pteroId];
                     if ($savedServer->name != $server['attributes']['name']) {
                         $savedServer->name = $server['attributes']['name'];
                         $savedServer->save();
@@ -244,11 +249,13 @@ class ServerController extends Controller
                 }
             }
         }
+        
         $filteredArray = array_filter($CPIDArray, function ($v, $k) {
             return $v == false;
-        }, ARRAY_FILTER_USE_BOTH); //Array of servers, that dont exist on ptero (value == false)
+        }, ARRAY_FILTER_USE_BOTH);
+        
         $deleteCount = 0;
-        foreach ($filteredArray as $key => $CPID) { //delete servers that dont exist on ptero anymore
+        foreach ($filteredArray as $key => $CPID) {
             if (!$this->pterodactyl->getServerAttributes($key, true)) {
                 $deleteCount++;
             }
