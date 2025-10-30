@@ -98,9 +98,18 @@ class User extends Authenticatable implements MustVerifyEmail
     public function __construct()
     {
         parent::__construct();
+    }
 
-        $ptero_settings = new PterodactylSettings();
-        $this->pterodactyl = new PterodactylClient($ptero_settings);
+    /**
+     * Get pterodactyl client instance (lazy loading)
+     */
+    private function getPterodactylClient(): PterodactylClient
+    {
+        if (!isset($this->pterodactyl)) {
+            $ptero_settings = new PterodactylSettings();
+            $this->pterodactyl = new PterodactylClient($ptero_settings);
+        }
+        return $this->pterodactyl;
     }
 
     public static function boot()
@@ -112,11 +121,11 @@ class User extends Authenticatable implements MustVerifyEmail
         });
 
         static::deleting(function (User $user) {
-
-
-            // delete every server the user owns without using chunks
-            $user->servers()->each(function ($server) {
-                $server->delete();
+            // delete every server the user owns with chunking for better performance
+            $user->servers()->chunk(100, function ($servers) {
+                foreach ($servers as $server) {
+                    $server->delete();
+                }
             });
 
             $user->payments()->delete();
@@ -129,7 +138,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
             $user->discordUser()->delete();
 
-            $user->pterodactyl->application->delete("/application/users/{$user->pterodactyl_id}");
+            $user->getPterodactylClient()->application->delete("/application/users/{$user->pterodactyl_id}");
         });
     }
 
@@ -247,9 +256,12 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function suspend()
     {
-        foreach ($this->servers as $server) {
-            $server->suspend();
-        }
+        // Use chunk to process servers in batches for better performance
+        $this->servers()->chunk(100, function ($servers) {
+            foreach ($servers as $server) {
+                $server->suspend();
+            }
+        });
 
         $this->update([
             'suspended' => true,
@@ -260,6 +272,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function unSuspend()
     {
+        // Get servers with product in a single query with eager loading
         foreach ($this->getServersWithProduct() as $server) {
             if ($this->credits >= $server->product->getHourlyPrice()) {
                 $server->unSuspend();

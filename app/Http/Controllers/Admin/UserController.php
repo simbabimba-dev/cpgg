@@ -417,7 +417,7 @@ class UserController extends Controller
      */
     public function dataTable(Request $request)
     {
-        $query = User::with('discordUser')
+        $query = User::with(['discordUser', 'roles'])
             ->withCount('servers')
             ->leftJoin('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
             ->leftJoin('roles', 'model_has_roles.role_id', '=', 'roles.id')
