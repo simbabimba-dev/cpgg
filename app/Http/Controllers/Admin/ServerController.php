@@ -219,8 +219,8 @@ class ServerController extends Controller
 
     public function syncServers()
     {
-        // Load all servers at once and key by pterodactyl_id for efficient lookup
-        $CPServers = Server::all()->keyBy('pterodactyl_id');
+        // For better memory management, only load pterodactyl_id and name
+        $CPServers = Server::select('id', 'pterodactyl_id', 'name')->get()->keyBy('pterodactyl_id');
 
         $CPIDArray = [];
         $renameCount = 0;
