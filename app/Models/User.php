@@ -197,14 +197,17 @@ class User extends Authenticatable implements MustVerifyEmail
     // tap into activity log to convert db value to display value
     public function tapActivity(Activity $activity, string $eventName)
     {
-        if (($eventName === 'deleted' || $eventName === 'created') && $activity->properties->has('attributes')) {
+        if (
+            ($eventName === 'deleted' || $eventName === 'created' || $eventName === 'updated')
+            && $activity->properties->has('attributes')
+        ) {
             $attributes = $activity->properties->get('attributes');
             if (isset($attributes['credits'])) {
                 $attributes['credits'] = Currency::formatForDisplay($attributes['credits']);
                 $activity->properties->put('attributes', $attributes);
             }
         }
-
+        return $activity;
     }
 
     /**

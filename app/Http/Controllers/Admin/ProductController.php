@@ -85,8 +85,17 @@ class ProductController extends Controller
             'swap' => [
                 'required',
                 function ($attribute, $value, $fail) {
-                    if ($value != -1 && (!ctype_digit((string) $value) || strlen((string) $value) > 100)) {
-                        $fail(__('Swap must be -1 for unlimited or a positive integer with at most 100 digits.'));
+                    if (!is_numeric($value) || (intval($value) != $value)) {
+                        $fail(__('Swap must be -1 for unlimited, 0 for disabled, or a positive integer with at most 100 digits.'));
+                        return;
+                    }
+                    $intValue = intval($value);
+                    if ($intValue === -1) {
+                        return;
+                    }
+                    // Check for 0 or positive integer, and at most 100 digits
+                    if ($intValue < 0 || strlen((string) $intValue) > 100) {
+                        $fail(__('Swap must be -1 for unlimited, 0 for disabled, or a positive integer with at most 100 digits.'));
                     }
                 }
             ],
@@ -170,8 +179,17 @@ class ProductController extends Controller
             'swap' => [
                 'required',
                 function ($attribute, $value, $fail) {
-                    if ($value != -1 && (!ctype_digit((string) $value) || strlen((string) $value) > 100)) {
-                        $fail(__('Swap must be -1 for unlimited or a positive integer with at most 100 digits.'));
+                    if (!is_numeric($value) || (intval($value) != $value)) {
+                        $fail(__('Swap must be -1 for unlimited, 0 for disabled, or a positive integer with at most 100 digits.'));
+                        return;
+                    }
+                    $intValue = intval($value);
+                    if ($intValue === -1) {
+                        return;
+                    }
+                    // Check for 0 or positive integer, and at most 100 digits
+                    if ($intValue < 0 || strlen((string) $intValue) > 100) {
+                        $fail(__('Swap must be -1 for unlimited, 0 for disabled, or a positive integer with at most 100 digits.'));
                     }
                 }
             ],
