@@ -150,7 +150,6 @@ class PaymentController extends Controller
             if ($couponCode) {
                 if ($this->isCouponValid($couponCode, $user, $shopProduct->id)) {
                     $subtotal = $this->applyCoupon($couponCode, $subtotal);
-                    $coupon = Coupon::where('code', $couponCode)->first();
                     event(new CouponUsedEvent($couponCode, $user));
                 }
             }
