@@ -5,6 +5,7 @@ namespace App\Listeners;
 use App\Events\CouponUsedEvent;
 use App\Settings\CouponSettings;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 
 class CouponUsed
 {
@@ -35,38 +36,48 @@ class CouponUsed
 
         // Increment per-user usage by attaching to user_coupons pivot
         if ($event->user && $event->coupon) {
-            $exists = $event->user->coupons()->where('coupon_id', $event->coupon->id)->exists();
-            if (!$exists) {
+            try {
                 $event->user->coupons()->attach($event->coupon->id, [
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
+            } catch (QueryException $e) {
+                // Ignore duplicate key errors - this is expected when concurrent requests
+                // both try to attach the same user-coupon relationship (idempotent).
+                if (!str_contains($e->getMessage(), 'Duplicate entry')) {
+                    throw $e;
+                }
             }
         }
 
         if ($this->delete_coupon_on_expires) {
-            if (!is_null($event->coupon->expired_at)) {
+            if (!is_null($event->coupon->expires_at)) {
                 if ($event->coupon->expires_at <= Carbon::now()->timestamp) {
-                    $event->coupon->delete();
+                    $freshCoupon = $event->coupon->fresh();
+                    if ($freshCoupon && $freshCoupon->expires_at <= Carbon::now()->timestamp) {
+                        $freshCoupon->delete();
+                    }
                 }
             }
         }
 
         if ($this->delete_coupon_on_uses_reached) {
-            if ($event->coupon->max_uses !== -1 && $event->coupon->uses >= $event->coupon->max_uses) {
-                $event->coupon->delete();
+            // Use fresh coupon data to avoid race conditions with concurrent increments.
+            $freshCoupon = $event->coupon->fresh();
+            if ($freshCoupon && $freshCoupon->max_uses !== -1 && $freshCoupon->uses >= $freshCoupon->max_uses) {
+                $freshCoupon->delete();
             }
         }
     }
 
     /**
      * Increments the use of a coupon.
+     * Uses atomic increment to ensure thread-safety.
      *
      * @param \App\Events\CouponUsedEvent  $event
      */
     private function incrementUses(CouponUsedEvent $event)
     {
         $event->coupon->increment('uses');
-        $event->coupon->save();
     }
 }

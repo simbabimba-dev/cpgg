@@ -77,19 +77,14 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
+        $this->checkPermission(self::WRITE_PERMISSION);
+
         $request->validate([
             'name' => 'required|max:30',
             'price' => 'required|numeric|max:1000000|min:0',
             'memory' => 'required|numeric|max:1000000|min:0',
             'cpu' => 'required|numeric|max:1000000|min:0',
-            'swap' => [
-                'required',
-                function ($attribute, $value, $fail) {
-                    if ($value != -1 && $value != 0 && (!ctype_digit((string) $value) || strlen((string) $value) > 100)) {
-                        $fail(__('Swap must be -1 for unlimited, 0 for disabled, or a positive integer with at most 100 digits.'));
-                    }
-                }
-            ],
+            'swap' => ['required', $this->getSwapValidator()],
             'description' => 'required|string|max:191',
             'disk' => 'required|numeric|max:1000000|min:0',
             'minimum_credits' => 'nullable|numeric|max:1000000',
@@ -167,14 +162,7 @@ class ProductController extends Controller
             'price' => 'required|numeric|max:1000000|min:0',
             'memory' => 'required|numeric|max:1000000|min:0',
             'cpu' => 'required|numeric|max:1000000|min:0',
-            'swap' => [
-                'required',
-                function ($attribute, $value, $fail) {
-                    if ($value != -1 && $value != 0 && (!ctype_digit((string) $value) || strlen((string) $value) > 100)) {
-                        $fail(__('Swap must be -1 for unlimited, 0 for disabled, or a positive integer with at most 100 digits.'));
-                    }
-                }
-            ],
+            'swap' => ['required', $this->getSwapValidator()],
             'description' => 'required|string|max:191',
             'disk' => 'required|numeric|max:1000000|min:0',
             'io' => 'required|numeric|max:1000000|min:0',
@@ -320,5 +308,18 @@ class ProductController extends Controller
             })
             ->rawColumns(['actions', 'disabled'])
             ->make();
+    }
+
+    /**
+     * Get reusable validator for swap field.
+     * Validates that swap is either -1 (unlimited), 0 (disabled), or a positive integer with at most 100 digits.
+     */
+    private function getSwapValidator()
+    {
+        return function ($attribute, $value, $fail) {
+            if ($value != -1 && $value != 0 && (!ctype_digit((string) $value) || strlen((string) $value) > 100)) {
+                $fail(__('Swap must be -1 for unlimited, 0 for disabled, or a positive integer with at most 100 digits.'));
+            }
+        };
     }
 }
