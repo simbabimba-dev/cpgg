@@ -150,7 +150,7 @@ class SettingsController extends Controller
             $rpType = $rp->getType();
 
             if ($rpType == 'bool') {
-                // Always assign false if key is missing (checkbox unchecked)
+                // Assign true if checkbox is checked, false otherwise
                 $settingsClass->$key = $request->has($key);
                 continue;
             }
