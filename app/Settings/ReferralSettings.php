@@ -18,11 +18,15 @@ class ReferralSettings extends Settings
         return 'referral';
     }
 
-    // /**
-    //  * Casts the settings to the correct type.
-    //  *
-    //  * @return array<string, CurrencyCast>
-    //  */
+    /**
+     * Casts the settings to the correct type.
+     *
+     * DEPRECATED: CurrencyCast usage is commented out due to Laravel settings cache issues.
+     * The casts interfere with proper caching and cause inconsistent behavior.
+     * Currency conversion is now handled manually in the SettingsController.
+     *
+     * @return array<string, CurrencyCast>
+     */
     // public static function casts(): array
     // {
     //     return [
