@@ -112,6 +112,14 @@ class ServerController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        // Anti-Spam: Make sure the user didnt somehow spam-create servers
+        $lastServerCreation = session('last_server_creation');
+        if ($lastServerCreation && (time() - $lastServerCreation < 10)) {
+            return redirect()->route('servers.index')
+                ->with('error', __('Please wait a few Seconds before creating a new Server.'));
+        }
+        session(['last_server_creation' => time()]);
+
         $validationResult = $this->validateServerCreation($request);
         if ($validationResult) return $validationResult;
 
