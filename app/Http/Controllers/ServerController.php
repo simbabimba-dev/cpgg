@@ -24,6 +24,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Request as FacadesRequest;
 use Illuminate\Support\Facades\Validator;
@@ -262,41 +263,54 @@ class ServerController extends Controller
 
         if (!$node) return null;
 
-        $server = $request->user()->servers()->create([
-            'name' => $request->input('name'),
-            'product_id' => $product->id,
-            'last_billed' => Carbon::now(),
-            'billing_priority' => $request->input('billing_priority', $product->default_billing_priority),
-        ]);
-
+        // Get allocation ID before creating any database records
         $allocationId = $this->pterodactyl->getFreeAllocationId($node);
         if (!$allocationId) {
             Log::error('No AllocationID found.', [
-                'server_id' => $server->id,
                 'node_id' => $node->id,
             ]);
-            $server->delete();
             return null;
         }
 
-        $response = $this->pterodactyl->createServer($server, $egg, $allocationId, $request->input('egg_variables'));
-        if ($response->failed()) {
-            Log::error('Failed to create server on Pterodactyl', [
-                'server_id' => $server->id,
-                'status' => $response->status(),
-                'error' => $response->json()
+        // Use database transaction to ensure atomicity
+        // If Pterodactyl server creation fails, the database record will be automatically rolled back
+        try {
+            return DB::transaction(function () use ($request, $product, $egg, $allocationId) {
+                // Create database record
+                $server = $request->user()->servers()->create([
+                    'name' => $request->input('name'),
+                    'product_id' => $product->id,
+                    'last_billed' => Carbon::now(),
+                    'billing_priority' => $request->input('billing_priority', $product->default_billing_priority),
+                ]);
+
+                // Create server on Pterodactyl
+                $response = $this->pterodactyl->createServer($server, $egg, $allocationId, $request->input('egg_variables'));
+                if ($response->failed()) {
+                    Log::error('Failed to create server on Pterodactyl', [
+                        'server_id' => $server->id,
+                        'status' => $response->status(),
+                        'error' => $response->json()
+                    ]);
+                    // Throw exception to rollback the transaction
+                    throw new Exception('Pterodactyl server creation failed');
+                }
+
+                // Update database record with Pterodactyl server details
+                $serverAttributes = $response->json()['attributes'];
+                $server->update([
+                    'pterodactyl_id' => $serverAttributes['id'],
+                    'identifier' => $serverAttributes['identifier']
+                ]);
+
+                return $server;
+            });
+        } catch (Exception $e) {
+            Log::error('Server creation failed', [
+                'error' => $e->getMessage()
             ]);
-            $server->delete();
             return null;
         }
-
-        $serverAttributes = $response->json()['attributes'];
-        $server->update([
-            'pterodactyl_id' => $serverAttributes['id'],
-            'identifier' => $serverAttributes['identifier']
-        ]);
-
-        return $server;
     }
 
     private function handlePostCreation(User $user, Server $server): void
