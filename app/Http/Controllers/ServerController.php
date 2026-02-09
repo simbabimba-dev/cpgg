@@ -136,8 +136,15 @@ class ServerController extends Controller
             $product = Product::with('eggs')->findOrFail($request->input('product'));
 
             // Reserve credits BEFORE provisioning (atomic, race-safe)
+            // Compute effective minimum credits (backwards compatible: null or -1 means use product price)
+            if (is_null($product->minimum_credits) || $product->minimum_credits == -1) {
+                $minCredits = $product->price;
+            } else {
+                $minCredits = $product->minimum_credits;
+            }
+
             $decremented = User::where('id', $user->id)
-                ->where('credits', '>=', $product->price)
+                ->where('credits', '>=', $minCredits)
                 ->decrement('credits', $product->price);
 
             if ($decremented === 0) {
@@ -170,14 +177,17 @@ class ServerController extends Controller
                 User::where('id', $user->id)->increment('credits', $product->price);
                 Cache::forget('user_credits_left:' . $user->id);
 
+                $correlationId = (string) \Illuminate\Support\Str::uuid();
                 Log::error('Server creation failed', [
                     'user_id' => $user->id,
                     'product_id' => $product->id,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                    'correlation_id' => $correlationId,
                 ]);
 
                 return redirect()->route('servers.index')
-                    ->with('error', __('Server creation failed: ') . $e->getMessage());
+                    ->with('error', __('Server creation failed. Please try again later. (Ref: :id)', ['id' => $correlationId]));
             }
         } finally {
             $lock->release();

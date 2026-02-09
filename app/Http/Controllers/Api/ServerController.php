@@ -97,8 +97,15 @@ class ServerController extends Controller
         $product = Product::with('eggs')->findOrFail($data['product_id']);
 
         // Reserve credits BEFORE provisioning (atomic, race-safe)
+        // Compute effective minimum credits: null or -1 means "use product price" (backwards compatible)
+        if (is_null($product->minimum_credits) || $product->minimum_credits == -1) {
+            $minCredits = $product->price;
+        } else {
+            $minCredits = $product->minimum_credits;
+        }
+
         $decremented = User::where('id', $user->id)
-            ->where('credits', '>=', $product->price)
+            ->where('credits', '>=', $minCredits)
             ->decrement('credits', $product->price);
 
         if ($decremented === 0) {
@@ -120,9 +127,18 @@ class ServerController extends Controller
             User::where('id', $user->id)->increment('credits', $product->price);
             \Illuminate\Support\Facades\Cache::forget('user_credits_left:' . $user->id);
 
+            $correlationId = (string) \Illuminate\Support\Str::uuid();
+            \Illuminate\Support\Facades\Log::error('API server creation failed', [
+                'user_id' => $user->id,
+                'product_id' => $product->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'correlation_id' => $correlationId,
+            ]);
+
             return response()->json([
-                'message' => $e->getMessage()
-            ], 401);
+                'message' => __('Server creation failed. Please try again later. (Ref: :id)', ['id' => $correlationId])
+            ], 500);
         }
     }
 
