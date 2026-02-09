@@ -1,4 +1,3 @@
-app/Http/Controllers/ServerController.php
 <?php
 
 namespace App\Http\Controllers;
@@ -29,6 +28,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Request as FacadesRequest;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules\Enum;
+use Illuminate\Support\Facades\Cache;
+use App\Services\ServerCreationService;
+use App\Events\ServerCreatedEvent;
 
 class ServerController extends Controller
 {
@@ -103,7 +105,6 @@ class ServerController extends Controller
             })->get(),
             'user' => Auth::user(),
             'server_creation_enabled' => $this->serverSettings->creation_enabled,
-            'min_credits_to_make_server' => $this->userSettings->min_credits_to_make_server,
             'credits_display_name' => $this->generalSettings->credits_display_name,
             'location_description_enabled' => $this->serverSettings->location_description_enabled,
             'store_enabled' => $this->generalSettings->store_enabled
@@ -112,36 +113,75 @@ class ServerController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $lockKey = 'server_create_lock_' . Auth::id();
-        if (Cache::has($lockKey)) {
+        $lock = Cache::lock('server_create_lock_' . Auth::id(), 10);
+        if (!$lock->get()) {
             return redirect()->route('servers.index')
                 ->with('error', __('Please wait a moment before creating another server.'));
         }
-        Cache::put($lockKey, true, 5);
 
-        $validationResult = $this->validateServerCreation($request);
-        if ($validationResult) return $validationResult;
+        try {
+            $validationResult = $this->validateServerCreation($request);
+            if ($validationResult) return $validationResult;
 
-        $request->validate([
-            'name' => 'required|max:191',
-            'location' => 'required|exists:locations,id',
-            'egg' => 'required|exists:eggs,id',
-            'product' => 'required|exists:products,id',
-            'egg_variables' => 'nullable|string',
-            'billing_priority' => ['nullable', new Enum(BillingPriority::class)],
-        ]);
+            $request->validate([
+                'name' => 'required|max:191',
+                'location' => 'required|exists:locations,id',
+                'egg' => 'required|exists:eggs,id',
+                'product' => 'required|exists:products,id',
+                'egg_variables' => 'nullable|string',
+                'billing_priority' => ['nullable', new Enum(BillingPriority::class)],
+            ]);
 
-        $server = $this->createServer($request);
+            $user = $request->user();
+            $product = Product::with('eggs')->findOrFail($request->input('product'));
 
-        if (!$server) {
-            return redirect()->route('servers.index')
-                ->with('error', __('Server creation failed'));
+            // Reserve credits BEFORE provisioning (atomic, race-safe)
+            $decremented = User::where('id', $user->id)
+                ->where('credits', '>=', $product->price)
+                ->decrement('credits', $product->price);
+
+            if ($decremented === 0) {
+                return redirect()->route('servers.index')
+                    ->with('error', __('Not enough :credits to create server', ['credits' => $this->generalSettings->credits_display_name]));
+            }
+
+            try {
+                // Map request data to format expected by ServerCreationService
+                $data = [
+                    'name' => $request->input('name'),
+                    'location_id' => $request->input('location'),
+                    'egg_id' => $request->input('egg'),
+                    'product_id' => $request->input('product'),
+                    'egg_variables' => $request->input('egg_variables'),
+                    'billing_priority' => $request->input('billing_priority', $product->default_billing_priority),
+                ];
+
+                // Use Ferks' ServerCreationService for provisioning
+                $server = app(ServerCreationService::class)->handle($user, $product, $data);
+
+                // Success - clear cache and fire event
+                Cache::forget('user_credits_left:' . $user->id);
+                event(new ServerCreatedEvent($user, $server));
+
+                return redirect()->route('servers.index')
+                    ->with('success', __('Server created'));
+            } catch (Exception $e) {
+                // Provisioning failed - refund credits
+                User::where('id', $user->id)->increment('credits', $product->price);
+                Cache::forget('user_credits_left:' . $user->id);
+
+                Log::error('Server creation failed', [
+                    'user_id' => $user->id,
+                    'product_id' => $product->id,
+                    'error' => $e->getMessage()
+                ]);
+
+                return redirect()->route('servers.index')
+                    ->with('error', __('Server creation failed: ') . $e->getMessage());
+            }
+        } finally {
+            $lock->release();
         }
-
-        $this->handlePostCreation($request->user(), $server);
-
-        return redirect()->route('servers.index')
-            ->with('success', __('Server created'));
     }
 
     private function validateServerCreation(Request $request): ?RedirectResponse
@@ -186,7 +226,12 @@ class ServerController extends Controller
             return __('You can not create any more Servers with this product!');
         }
 
-        $minCredits = $product->minimum_credits ?: $this->userSettings->min_credits_to_make_server;
+        // Determine effective minimum credits: if minimum_credits is not set, use product price.
+        if (is_null($product->minimum_credits)) {
+            $minCredits = $product->price;
+        } else {
+            $minCredits = $product->minimum_credits;
+        }
 
         if ($user->credits < $minCredits) {
             return 'You do not have the required amount of ' . $this->generalSettings->credits_display_name . ' to use this product!';
@@ -262,72 +307,6 @@ class ServerController extends Controller
         }
     }
 
-    private function createServer(Request $request): ?Server
-    {
-        $product = Product::findOrFail($request->input('product'));
-        $egg = $product->eggs()->findOrFail($request->input('egg'));
-        $node = $this->findAvailableNode($request->input('location'), $product);
-
-        if (!$node) return null;
-
-        $server = $request->user()->servers()->create([
-            'name' => $request->input('name'),
-            'product_id' => $product->id,
-            'last_billed' => Carbon::now(),
-            'billing_priority' => $request->input('billing_priority', $product->default_billing_priority),
-        ]);
-
-        $allocationId = $this->pterodactyl->getFreeAllocationId($node);
-        if (!$allocationId) {
-            Log::error('No AllocationID found.', [
-                'server_id' => $server->id,
-                'node_id' => $node->id,
-            ]);
-            $server->delete();
-            return null;
-        }
-
-        $response = $this->pterodactyl->createServer($server, $egg, $allocationId, $request->input('egg_variables'));
-        if ($response->failed()) {
-            Log::error('Failed to create server on Pterodactyl', [
-                'server_id' => $server->id,
-                'status' => $response->status(),
-                'error' => $response->json()
-            ]);
-            $server->delete();
-            return null;
-        }
-
-        $serverAttributes = $response->json()['attributes'];
-        $server->update([
-            'pterodactyl_id' => $serverAttributes['id'],
-            'identifier' => $serverAttributes['identifier']
-        ]);
-
-        return $server;
-    }
-
-    private function handlePostCreation(User $user, Server $server): void
-    {
-        logger('Product Price: ' . $server->product->price);
-
-        $user->decrement('credits', $server->product->price);
-
-        try {
-            if ($this->discordSettings->role_for_active_clients &&
-                $user->discordUser &&
-                $user->servers->count() >= 1
-            ) {
-                $user->discordUser->addOrRemoveRole(
-                    'add',
-                    $this->discordSettings->role_id_for_active_clients
-                );
-            }
-        } catch (Exception $e) {
-            Log::debug('Discord role update failed: ' . $e->getMessage());
-        }
-    }
-
     public function destroy(Server $server): RedirectResponse
     {
         if ($server->user_id !== Auth::id()) {
@@ -370,6 +349,7 @@ class ServerController extends Controller
         }
 
         $server->delete();
+        Cache::forget('user_credits_left:' . $server->user_id);
     }
 
     public function cancel(Server $server): RedirectResponse

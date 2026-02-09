@@ -80,61 +80,55 @@
                                 </div>
                                 <div class="row">
                                     <div class="col-lg-6">
-										<div class="form-group">
-											<label for="billing_period">{{ __('Billing Period') }} <i
-													data-toggle="popover" data-trigger="hover"
-													data-content="{{ __('Period when the user will be charged for the given price') }}"
-													class="fas fa-info-circle"></i></label>
-											<select id="billing_period" style="width:100%" class="custom-select"
-													name="billing_period" required autocomplete="off"
-													@error('billing_period') is-invalid @enderror>
-												<option value="hourly" @selected(old('billing_period', $product->billing_period ?? '') == 'hourly')>
-													{{ __('Hourly') }}
-												</option>
-												<option value="daily" @selected(old('billing_period', $product->billing_period ?? '') == 'daily')>
-													{{ __('Daily') }}
-												</option>
-												<option value="weekly" @selected(old('billing_period', $product->billing_period ?? '') == 'weekly')>
-													{{ __('Weekly') }}
-												</option>
-												<option value="monthly" @selected(old('billing_period', $product->billing_period ?? '') == 'monthly')>
-													{{ __('Monthly') }}
-												</option>
-												<option value="quarterly" @selected(old('billing_period', $product->billing_period ?? '') == 'quarterly')>
-													{{ __('Quarterly') }}
-												</option>
-												<option value="half-annually" @selected(old('billing_period', $product->billing_period ?? '') == 'half-annually')>
-													{{ __('Half Annually') }}
-												</option>
-												<option value="annually" @selected(old('billing_period', $product->billing_period ?? '') == 'annually')>
-													{{ __('Annually') }}
-												</option>
-											</select>
-											@error('billing_period')
-												<div class="invalid-feedback">
-													{{ $message }}
-												</div>
-											@enderror
-										</div>
-									</div>
+                                        <div class="form-group">
+                                            <label for="billing_period">{{ __('Billing Period') }} <i data-toggle="popover"
+                                                    data-trigger="hover"
+                                                    data-content="{{ __('Period when the user will be charged for the given price') }}"
+                                                    class="fas fa-info-circle"></i></label>
+                                            <select id="billing_period" style="width: 100%" class="custom-select"
+                                                name="billing_period" required autocomplete="off"
+                                                @error('billing_period') is-invalid @enderror>
+                                                <option value="hourly" @selected(old('billing_period', $product->billing_period ?? '') == 'hourly')>
+                                                    {{ __('Hourly') }}
+                                                </option>
+                                                <option value="daily" @selected(old('billing_period', $product->billing_period ?? '') == 'daily')>
+                                                    {{ __('Daily') }}
+                                                </option>
+                                                <option value="weekly" @selected(old('billing_period', $product->billing_period ?? '') == 'weekly')>
+                                                    {{ __('Weekly') }}
+                                                </option>
+                                                <option value="monthly" @selected(old('billing_period', $product->billing_period ?? '') == 'monthly')>
+                                                    {{ __('Monthly') }}
+                                                </option>
+                                                <option value="quarterly" @selected(old('billing_period', $product->billing_period ?? '') == 'quarterly')>
+                                                    {{ __('Quarterly') }}
+                                                </option>
+                                                <option value="half-annually" @selected(old('billing_period', $product->billing_period ?? '') == 'half-annually')>
+                                                    {{ __('Half Annually') }}
+                                                </option>
+                                                <option value="annually" @selected(old('billing_period', $product->billing_period ?? '') == 'annually')>
+                                                    {{ __('Annually') }}
+                                                </option>
+                                            </select>
+                                            @error('billing_period')
+                                                <div class="invalid-feedback">
+                                                    {{ $message }}
+                                                </div>
+                                            @enderror
+                                        </div>
+                                    </div>
                                     <div class="col-lg-6">
                                         <div class="form-group">
                                             <label for="default_billing_priority">
                                                 {{ __('Default Billing Priority') }}
-                                                <i
-                                                    data-toggle="popover"
-                                                    data-trigger="hover"
-                                                    data-content="{{ __('Defines the priority at which the servers in this product will be charged.') }}"
+                                                <i data-toggle="popover" data-trigger="hover"
+                                                    data-content="{{ __('Defines the priority at which the servers in this product will be charged. ') }}"
                                                     class="fas fa-info-circle"></i>
                                             </label>
-                                            <select
-                                                id="default_billing_priority"
-                                                style="width:100%"
-                                                class="custom-select"
+                                            <select id="default_billing_priority" style="width:100%" class="custom-select"
                                                 name="default_billing_priority" required autocomplete="off"
-                                                @error('default_billing_priority') is-invalid @enderror
-                                            >
-                                                @foreach(App\Enums\BillingPriority::options() as $value => $label)
+                                                @error('default_billing_priority') is-invalid @enderror>
+                                                @foreach (App\Enums\BillingPriority::options() as $value => $label)
                                                     <option value="{{ $value }}" @selected(old('default_billing_priority', $product->default_billing_priority->value ?? '') == $value || $value == App\Enums\BillingPriority::MEDIUM->value)>
                                                         {{ $label }}
                                                     </option>
@@ -152,8 +146,9 @@
                                     <div class="col-lg-6">
                                         <div class="form-group">
                                             <label for="price">{{ __('Price in') }} {{ $credits_display_name }}</label>
-                                            <input value="{{ old('price', isset($product) ? Currency::formatForForm($product->price) : '') }}" id="price"
-                                                name="price" step=".0001" type="number"
+                                            <input
+                                                value="{{ old('price', isset($product) ? Currency::formatForForm($product->price) : '') }}"
+                                                id="price" name="price" step=".0001" type="number"
                                                 class="form-control @error('price') is-invalid @enderror"
                                                 required="required">
                                             @error('price')
@@ -164,37 +159,38 @@
                                         </div>
                                     </div>
                                     <div class="col-lg-6">
-										<div class="form-group">
-											<label for="minimum_credits">{{ __('Minimum') }} {{ $credits_display_name }}
-												<i data-toggle="popover" data-trigger="hover"
-													data-content="{{ __('Setting to empty will use the value from configuration.') }}"
-													class="fas fa-info-circle"></i></label>
-											<input
-												value="{{ old('minimum_credits', (isset($product) && $product->minimum_credits) ? Currency::formatForForm($product->minimum_credits) : null) }}"
-												id="minimum_credits" name="minimum_credits" type="number"
-												class="form-control @error('minimum_credits') is-invalid @enderror">
-											@error('minimum_credits')
-												<div class="invalid-feedback">
-													{{ $message }}
-												</div>
-											@enderror
-										</div>
-									</div>
+                                        <div class="form-group">
+                                            <label for="minimum_credits">{{ __('Minimum') }} {{ $credits_display_name }}
+                                                <i data-toggle="popover" data-trigger="hover"
+                                                    data-content="{{ __('Leave empty to use the product price. Minimum credits cannot be less than the product price.') }}"
+                                                    class="fas fa-info-circle"></i></label>
+                                            <input
+                                                value="{{ old('minimum_credits', isset($product) && $product->minimum_credits ? Currency::formatForForm($product->minimum_credits) : null) }}"
+                                                id="minimum_credits" name="minimum_credits" type="number"
+                                                class="form-control @error('minimum_credits') is-invalid @enderror">
+                                            @error('minimum_credits')
+                                                <div class="invalid-feedback">
+                                                    {{ $message }}
+                                                </div>
+                                            @enderror
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="row">
                                     <div class="col-lg-6">
-										<div class="form-group">
-											<label for="cpu">{{ __('Cpu') }}</label>
-											<input value="{{ $product->cpu ?? old('cpu') }}" id="cpu" name="cpu"
-												type="number" class="form-control @error('cpu') is-invalid @enderror"
-												required="required">
-											@error('cpu')
-												<div class="invalid-feedback">
-													{{ $message }}
-												</div>
-											@enderror
-										</div>
-									</div>
+                                        <div class="form-group">
+                                            <label for="cpu">{{ __('Cpu') }}</label>
+                                            <input value="{{ $product->cpu ?? old('cpu') }}" id="cpu"
+                                                name="cpu" type="number"
+                                                class="form-control @error('cpu') is-invalid @enderror"
+                                                required="required">
+                                            @error('cpu')
+                                                <div class="invalid-feedback">
+                                                    {{ $message }}
+                                                </div>
+                                            @enderror
+                                        </div>
+                                    </div>
                                     <div class="col-lg-6">
 										<div class="form-group">
 											<label for="disk">{{ __('Disk') }}</label>
@@ -257,10 +253,22 @@
 									</div>
                                     <div class="col-lg-6">
                                         <div class="form-group">
-                                            <label for="serverlimit">{{ __('Serverlimit') }}</label>
-                                            <i
-                                                data-toggle="popover"
-                                                data-trigger="hover"
+                                            <label for="swap">{{ __('Swap') }}</label>
+                                            <input value="{{ $product->swap ?? old('swap') }}" id="swap"
+                                                name="swap" type="number"
+                                                class="form-control @error('swap') is-invalid @enderror"
+                                                required="required">
+                                            @error('swap')
+                                                <div class="invalid-feedback">
+                                                    {{ $message }}
+                                                </div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-6">
+                                        <div class="form-group">
+                                            <label for="serverlimit">{{ __('Server limit') }}</label>
+                                            <i data-toggle="popover" data-trigger="hover"
                                                 data-content="{{ __('The maximum amount of Servers that can be created with this Product per User') }}"
                                                 class="fas fa-info-circle">
                                             </i>
@@ -278,48 +286,48 @@
 								</div>
 								<div class="row">
                                     <div class="col-lg-4">
-										<div class="form-group">
-											<label for="allocations">{{ __('Allocations') }}</label>
-											<input value="{{ $product->allocations ?? (old('allocations') ?? 0) }}"
-												id="allocations" name="allocations" type="number"
-												class="form-control @error('allocations') is-invalid @enderror"
-												required="required">
-											@error('allocations')
-												<div class="invalid-feedback">
-													{{ $message }}
-												</div>
-											@enderror
-										</div>
-									</div>
-									<div class="col-lg-4">
-										<div class="form-group">
-											<label for="databases">{{ __('Databases') }}</label>
-											<input value="{{ $product->databases ?? (old('databases') ?? 1) }}"
-												id="databases" name="databases" type="number"
-												class="form-control @error('databases') is-invalid @enderror"
-												required="required">
-											@error('databases')
-												<div class="invalid-feedback">
-													{{ $message }}
-												</div>
-											@enderror
-										</div>
-									</div>
-									<div class="col-lg-4">
-										<div class="form-group">
-											<label for="backups">{{ __('Backups') }}</label>
-											<input value="{{ $product->backups ?? (old('backups') ?? 1) }}"
-												id="backups" name="backups" type="number"
-												class="form-control @error('backups') is-invalid @enderror"
-												required="required">
-											@error('backups')
-												<div class="invalid-feedback">
-													{{ $message }}
-												</div>
-											@enderror
-										</div>
-									</div>
-								</div>
+                                        <div class="form-group">
+                                            <label for="allocations">{{ __('Allocations') }}</label>
+                                            <input value="{{ $product->allocations ?? (old('allocations') ?? 0) }}"
+                                                id="allocations" name="allocations" type="number"
+                                                class="form-control @error('allocations') is-invalid @enderror"
+                                                required="required">
+                                            @error('allocations')
+                                                <div class="invalid-feedback">
+                                                    {{ $message }}
+                                                </div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-4">
+                                        <div class="form-group">
+                                            <label for="databases">{{ __('Databases') }}</label>
+                                            <input value="{{ $product->databases ?? (old('databases') ?? 1) }}"
+                                                id="databases" name="databases" type="number"
+                                                class="form-control @error('databases') is-invalid @enderror"
+                                                required="required">
+                                            @error('databases')
+                                                <div class="invalid-feedback">
+                                                    {{ $message }}
+                                                </div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-4">
+                                        <div class="form-group">
+                                            <label for="backups">{{ __('Backups') }}</label>
+                                            <input value="{{ $product->backups ?? (old('backups') ?? 1) }}"
+                                                id="backups" name="backups" type="number"
+                                                class="form-control @error('backups') is-invalid @enderror"
+                                                required="required">
+                                            @error('backups')
+                                                <div class="invalid-feedback">
+                                                    {{ $message }}
+                                                </div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                </div>
 
 								<div class="row">
 									<div class="col-lg-6">
@@ -327,9 +335,8 @@
 											<input type="checkbox" value="1" id="oom_killer" name="oom_killer">
 											<label for="oom_killer">
                                                 {{ __('OOM Killer') }}
-                                                <i data-toggle="popover"
-                                                    data-trigger="hover"
-                                                    data-content="{{ __('Enable or Disable the OOM Killer for this Product.') }}"
+                                                <i data-toggle="popover" data-trigger="hover"
+                                                    data-content="{{ __('Enable or Disable the OOM Killer for this Product. ') }}"
                                                     class="fas fa-info-circle">
                                                 </i>
                                             </label>
@@ -389,15 +396,18 @@
                                     <div class="mb-2 d-flex justify-content-between align-items-center">
                                         <label for="eggs" class="mb-0">{{ __('Eggs') }}</label>
                                         <div>
-                                            <button type="button" id="select-all-eggs" class="btn btn-sm btn-secondary">{{ __('Select All') }}</button>
-                                            <button type="button" id="deselect-all-eggs" class="ml-2 btn btn-sm btn-secondary">{{ __('Deselect All') }}</button>
+                                            <button type="button" id="select-all-eggs"
+                                                class="btn btn-sm btn-secondary">{{ __('Select All') }}</button>
+                                            <button type="button" id="deselect-all-eggs"
+                                                class="ml-2 btn btn-sm btn-secondary">{{ __('Deselect All') }}</button>
                                         </div>
                                     </div>
                                     <select id="eggs" style="width:100%"
                                         class="custom-select @error('eggs') is-invalid @enderror" name="eggs[]"
                                         multiple="multiple" autocomplete="off">
                                         @foreach ($nests as $nest)
-                                            <optgroup label="{{ $nest->name }}">
+                                            <optgroup label="{{ $nest->name }}" class="nest-group"
+                                                data-nest-id="{{ $nest->id }}">
                                                 @foreach ($nest->eggs as $egg)
                                                     <option
                                                         @if (isset($product)) @if ($product->eggs->contains('id', $egg->id)) selected @endif
@@ -440,7 +450,29 @@
                 minimumResultsForSearch: -1
             });
 
-            document.getElementById('select-all-eggs').addEventListener('click', function() {
+            $(document).on('click', '.select2-results__group', function(e) {
+                const nestLabel = $(this).text().trim();
+                const $select = $('#eggs');
+                const allOptions = $select.find('option');
+
+                const groupOptions = allOptions.filter(function() {
+                    const $this = $(this);
+                    const $group = $this.closest('optgroup');
+                    return $group.length && $group.attr('label') === nestLabel;
+                });
+
+                const allSelected = groupOptions.length > 0 && groupOptions.length === groupOptions.filter(
+                    ': selected').length;
+
+                groupOptions.prop('selected', !allSelected);
+                $select.trigger('change');
+
+                e.stopPropagation();
+                return false;
+            });
+
+            document.getElementById('select-all-eggs').addEventListener('click', function(e) {
+                e.preventDefault();
                 $('#eggs option').prop('selected', true);
                 $('#eggs').trigger('change');
             });

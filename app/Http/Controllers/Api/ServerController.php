@@ -68,7 +68,7 @@ class ServerController extends Controller
      * @param  Request  $request
      * @param  string  $serverId
      * @return ServerResource
-     * 
+     *
      * @throws ModelNotFoundException
      */
     public function show(Request $request, string $serverId)
@@ -86,7 +86,7 @@ class ServerController extends Controller
      *
      * @param  Request  $request
      * @return ServerResource
-     * 
+     *
      * @throws ValidationException
      */
     public function store(CreateServerRequest $request)
@@ -96,15 +96,30 @@ class ServerController extends Controller
         $user = User::findOrFail($data['user_id']);
         $product = Product::with('eggs')->findOrFail($data['product_id']);
 
+        // Reserve credits BEFORE provisioning (atomic, race-safe)
+        $decremented = User::where('id', $user->id)
+            ->where('credits', '>=', $product->price)
+            ->decrement('credits', $product->price);
+
+        if ($decremented === 0) {
+            return response()->json([
+                'message' => 'User does not have enough credits to create this server.'
+            ], 402);
+        }
+
         try {
             $server = $this->serverCreationService->handle($user, $product, $data);
 
-            $user->decrement("credits", $product->price);
-
+            // Success - clear cache and fire event
+            \Illuminate\Support\Facades\Cache::forget('user_credits_left:' . $user->id);
             event(new ServerCreatedEvent($user, $server));
 
             return ServerResource::make($server->fresh());
         } catch (Exception $e) {
+            // Provisioning failed - refund credits
+            User::where('id', $user->id)->increment('credits', $product->price);
+            \Illuminate\Support\Facades\Cache::forget('user_credits_left:' . $user->id);
+
             return response()->json([
                 'message' => $e->getMessage()
             ], 401);
@@ -117,7 +132,7 @@ class ServerController extends Controller
      * @param UpdateServerRequest $request
      * @param Server $server
      * @return ServerResource
-     * 
+     *
      * @throws ModelNotFoundException
      * @throws Exception
      */
@@ -157,7 +172,7 @@ class ServerController extends Controller
      * @param  UpdateServerBuildRequest  $request
      * @param  Server  $server
      * @return ServerResource|JsonResponse
-     * 
+     *
      * @throws ModelNotFoundException
      */
     public function updateBuild(UpdateServerBuildRequest $request, Server $server)
@@ -182,7 +197,7 @@ class ServerController extends Controller
      * @param  DeleteServerRequest  $request
      * @param  Server  $server
      * @return \Illuminate\Http\Response
-     * 
+     *
      * @throws ModelNotFoundException
      */
     public function destroy(DeleteServerRequest $request, Server $server)
@@ -214,7 +229,7 @@ class ServerController extends Controller
      * @param  SuspendServerRequest  $request
      * @param  Server  $server
      * @return ServerResource|JsonResponse
-     * 
+     *
      * @throws ModelNotFoundException
      */
     public function suspend(SuspendServerRequest $request, Server $server)
@@ -244,7 +259,7 @@ class ServerController extends Controller
      * @param  UnsuspendServerRequest  $request
      * @param  Server  $server
      * @return ServerResource|JsonResponse
-     * 
+     *
      * @throws ModelNotFoundException
      */
     public function unSuspend(UnsuspendServerRequest $request, Server $server)

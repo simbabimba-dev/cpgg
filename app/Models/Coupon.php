@@ -12,7 +12,7 @@ use Spatie\Activitylog\Traits\LogsActivity;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Casts\Attribute;
-
+use Illuminate\Support\Facades\DB;
 class Coupon extends Model
 {
     use HasFactory, LogsActivity, CausesActivity;
@@ -34,6 +34,7 @@ class Coupon extends Model
         'value',
         'uses',
         'max_uses',
+        'max_uses_per_user',
         'expires_at'
     ];
 
@@ -44,7 +45,8 @@ class Coupon extends Model
         'value' => 'float',
         'uses' => 'integer',
         'max_uses' => 'integer',
-        'expires_at' => 'timestamp'
+        'max_uses_per_user' => 'integer',
+        'expires_at' => 'timestamp',
     ];
 
     /**
@@ -80,13 +82,11 @@ class Coupon extends Model
             return 'USES_LIMIT_REACHED';
         }
 
-        if (!is_null($this->expires_at)) {
-            if ($this->expires_at <= Carbon::now(config('app.timezone'))->timestamp) {
-                return __('EXPIRED');
-            }
+        if (!is_null($this->expires_at) && $this->expires_at <= Carbon::now(config('app.timezone'))->timestamp) {
+            return 'EXPIRED';
         }
 
-        return __('VALID');
+        return 'VALID';
     }
 
     /**
@@ -98,10 +98,21 @@ class Coupon extends Model
      */
     public function isMaxUsesReached($user): bool
     {
-        $coupon_settings = new CouponSettings;
-        $coupon_uses = $user->coupons()->where('id', $this->id)->count();
+        // Per-coupon max_uses_per_user is the single source of truth
+        $limit = $this->max_uses_per_user;
 
-        return $coupon_uses >= $coupon_settings->max_uses_per_user;
+        // Treat -1 as unlimited per-user uses
+        if ($limit === -1) {
+            return false;
+        }
+
+        // Read actual per-user usage count from pivot 'uses' column (use DB to be robust)
+        $coupon_uses = DB::table('user_coupons')
+            ->where('user_id', $user->id)
+            ->where('coupon_id', $this->id)
+            ->value('uses') ?? 0;
+
+        return $coupon_uses >= $limit;
     }
 
     /**
@@ -125,10 +136,23 @@ class Coupon extends Model
     }
 
     /**
+     * Ensure pivot rows are removed before deleting a coupon to avoid FK constraint errors.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::deleting(function ($coupon) {
+            // Detach related user pivot rows (removes entries in user_coupons)
+            $coupon->users()->detach();
+        });
+    }
+
+    /**
      * @return BelongsToMany
      */
     public function users()
     {
-        return $this->belongsToMany(User::class, 'user_coupons');
+        return $this->belongsToMany(User::class, 'user_coupons')->withPivot('uses')->withTimestamps();
     }
 }

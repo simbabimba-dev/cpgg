@@ -126,7 +126,19 @@ class RegisterController extends Controller
      */
     protected function create(array $data)
     {
-        $response = $this->pterodactylClient->application->post('/application/users', [
+        $user = User::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'credits' => $this->initial_credits,
+            'server_limit' => $this->initial_server_limit,
+            'password' => Hash::make($data['password']),
+            'referral_code' => $this->createReferralCode(),
+            'pterodactyl_id' => Str::uuid(),
+        ]);
+
+        $user->syncRoles(Role::findById(4)); //user
+
+        $response = $this->pterodactyl->application->post('/application/users', [
             'external_id' => null,
             'username' => $data['name'],
             'email' => $data['email'],
@@ -161,8 +173,12 @@ class RegisterController extends Controller
             'pterodactyl_id' => $response->json()['attributes']['id'],
         ]);
 
-        $user->syncRoles(Role::findById(4));
-
+        // delete activity log for user creation where description = 'created' or 'deleted' and subject_id = user_id
+        DB::table('activity_log')
+            ->whereIn('description', ['created', 'deleted'])
+            ->where('subject_id', $user->id)
+            ->delete();
+        //INCREMENT REFERRAL-USER CREDITS
         if (!empty($data['referral_code'])) {
             $this->processReferralAction->execute($user, $data['referral_code'], true);
         }
