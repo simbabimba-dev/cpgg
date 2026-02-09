@@ -47,6 +47,9 @@ class ServerCreationService
     {
         $egg = $product->eggs->firstWhere('id', $data['egg_id']);
 
+            if (! $egg) {
+                throw new \Exception('Selected egg does not belong to the chosen product.');
+            }
         try {
             $validatedData = $this->validateAndPrepare($user, $product, $data);
 
@@ -101,25 +104,20 @@ class ServerCreationService
                     // Remote server not found; delete local server to avoid orphan
                     $server->delete();
                 } catch (\Exception $inner) {
+                    // Reconciliation failed (transient network/panel outage). Do not delete local server here
+                    // as the remote state is uncertain; let upstream handle retries via a reconciliation job.
                     Log::error('Server creation reconciliation check failed', [
                         'server_id' => $server->id,
                         'error' => $inner->getMessage(),
                     ]);
 
-                    // Attempt to delete local server; if it fails, log and continue to rethrow
-                    try {
-                        $server->delete();
-                    } catch (\Throwable $deleteExc) {
-                        Log::error('Failed to delete server after failed creation', [
-                            'server_id' => $server->id,
-                            'error' => $deleteExc->getMessage(),
-                        ]);
-                    }
+                    // Re-throw the original provisioning exception to ensure controller can refund/dispatch reconciliation
+                    throw $e;
                 }
             }
 
             // Re-throw original exception for upstream handling (controller will refund/notify/reconcile)
-            throw new \Exception($e->getMessage());
+            throw $e;
         }
     }
 
@@ -142,11 +140,7 @@ class ServerCreationService
         // Check if user has enough credits to create the server.
         // Use per-product minimum_credits, defaulting to product price if not set.
         // Backward compatibility: some legacy rows use -1 to indicate "use product price".
-        if (is_null($product->minimum_credits) || $product->minimum_credits == -1) {
-            $minCredits = $product->price;
-        } else {
-            $minCredits = $product->minimum_credits;
-        }
+        $minCredits = $product->effectiveMinimumCredits();
 
         if ($user->credits < $minCredits) {
             throw new \Exception(

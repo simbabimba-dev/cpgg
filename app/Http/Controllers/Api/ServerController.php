@@ -25,7 +25,9 @@ use Illuminate\Http\Request;
 use Spatie\QueryBuilder\QueryBuilder;
 use Spatie\QueryBuilder\AllowedFilter;
 use Exception;
-
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Str;
+use Illuminate\Support\Facades\Log;
 class ServerController extends Controller
 {
     protected PterodactylSettings $pterodactylSettings;
@@ -71,14 +73,12 @@ class ServerController extends Controller
      *
      * @throws ModelNotFoundException
      */
-    public function show(Request $request, string $serverId)
+    public function show(Server $server)
     {
-        $server = QueryBuilder::for(Server::class)
-            ->allowedIncludes(self::ALLOWED_INCLUDES)
-            ->where('id', $serverId)
-            ->firstOrFail();
+        // Route-model binding used (route parameter is `{server}`). Return resource with allowed includes
+        $server->loadMissing(self::ALLOWED_INCLUDES);
 
-        return ServerResource::make($server);
+        return ServerResource::make($server->fresh());
     }
 
     /**
@@ -97,12 +97,8 @@ class ServerController extends Controller
         $product = Product::with('eggs')->findOrFail($data['product_id']);
 
         // Reserve credits BEFORE provisioning (atomic, race-safe)
-        // Compute effective minimum credits: null or -1 means "use product price" (backwards compatible)
-        if (is_null($product->minimum_credits) || $product->minimum_credits == -1) {
-            $minCredits = $product->price;
-        } else {
-            $minCredits = $product->minimum_credits;
-        }
+        // Use product helper for effective minimum credits
+        $minCredits = $product->effectiveMinimumCredits();
 
         $decremented = User::where('id', $user->id)
             ->where('credits', '>=', $minCredits)
@@ -118,17 +114,17 @@ class ServerController extends Controller
             $server = $this->serverCreationService->handle($user, $product, $data);
 
             // Success - clear cache and fire event
-            \Illuminate\Support\Facades\Cache::forget('user_credits_left:' . $user->id);
+            Cache::forget('user_credits_left:' . $user->id);
             event(new ServerCreatedEvent($user, $server));
 
             return ServerResource::make($server->fresh());
         } catch (Exception $e) {
             // Provisioning failed - refund credits
             User::where('id', $user->id)->increment('credits', $product->price);
-            \Illuminate\Support\Facades\Cache::forget('user_credits_left:' . $user->id);
+            Cache::forget('user_credits_left:' . $user->id);
 
-            $correlationId = (string) \Illuminate\Support\Str::uuid();
-            \Illuminate\Support\Facades\Log::error('API server creation failed', [
+            $correlationId = (string) Str::uuid();
+            Log::error('API server creation failed', [
                 'user_id' => $user->id,
                 'product_id' => $product->id,
                 'error' => $e->getMessage(),

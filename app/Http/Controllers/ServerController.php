@@ -136,12 +136,8 @@ class ServerController extends Controller
             $product = Product::with('eggs')->findOrFail($request->input('product'));
 
             // Reserve credits BEFORE provisioning (atomic, race-safe)
-            // Compute effective minimum credits (backwards compatible: null or -1 means use product price)
-            if (is_null($product->minimum_credits) || $product->minimum_credits == -1) {
-                $minCredits = $product->price;
-            } else {
-                $minCredits = $product->minimum_credits;
-            }
+            // Use product helper for effective minimum credits
+            $minCredits = $product->effectiveMinimumCredits();
 
             $decremented = User::where('id', $user->id)
                 ->where('credits', '>=', $minCredits)
@@ -162,6 +158,11 @@ class ServerController extends Controller
                     'egg_variables' => $request->input('egg_variables'),
                     'billing_priority' => $request->input('billing_priority', $product->default_billing_priority),
                 ];
+
+                // Ensure the selected egg belongs to the product (defensive check)
+                if (! $product->eggs->firstWhere('id', $data['egg_id'])) {
+                    throw new \Exception('Selected egg does not belong to the chosen product.');
+                }
 
                 // Use Ferks' ServerCreationService for provisioning
                 $server = app(ServerCreationService::class)->handle($user, $product, $data);
@@ -236,12 +237,8 @@ class ServerController extends Controller
             return __('You can not create any more Servers with this product!');
         }
 
-        // Determine effective minimum credits: if minimum_credits is not set, use product price.
-        if (is_null($product->minimum_credits)) {
-            $minCredits = $product->price;
-        } else {
-            $minCredits = $product->minimum_credits;
-        }
+        // Determine effective minimum credits using Product helper
+        $minCredits = $product->effectiveMinimumCredits();
 
         if ($user->credits < $minCredits) {
             return 'You do not have the required amount of ' . $this->generalSettings->credits_display_name . ' to use this product!';
