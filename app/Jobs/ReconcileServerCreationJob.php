@@ -3,8 +3,8 @@
 namespace App\Jobs;
 
 use App\Classes\PterodactylClient;
+use App\Events\ServerCreatedEvent;
 use App\Settings\PterodactylSettings;
-use App\Jobs\HandlePostServerCreationJob;
 use App\Models\Server;
 use App\Models\User;
 use Exception;
@@ -44,7 +44,7 @@ class ReconcileServerCreationJob implements ShouldQueue
 
         // If server already has a pterodactyl_id, assume success and ensure post-creation tasks run
         if ($server->pterodactyl_id) {
-            HandlePostServerCreationJob::dispatch($server->user_id, $server->id);
+            event(new ServerCreatedEvent($server->user, $server));
 
             // Clear cached credits
             Cache::forget('user_credits_left:' . $server->user_id);
@@ -61,13 +61,13 @@ class ReconcileServerCreationJob implements ShouldQueue
         }
 
         if ($attrs) {
-            // Remote server exists — update local record and dispatch post-creation tasks
+            // Remote server exists — update local record and fire post-creation event
             $server->update([
                 'pterodactyl_id' => $attrs['id'],
                 'identifier' => $attrs['identifier'] ?? $server->identifier,
             ]);
 
-            HandlePostServerCreationJob::dispatch($server->user_id, $server->id);
+            event(new ServerCreatedEvent($server->user, $server));
             Cache::forget('user_credits_left:' . $server->user_id);
             return;
         }
