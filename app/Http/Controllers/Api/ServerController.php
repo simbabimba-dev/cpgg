@@ -25,37 +25,25 @@ use Illuminate\Http\Request;
 use Spatie\QueryBuilder\QueryBuilder;
 use Spatie\QueryBuilder\AllowedFilter;
 use Exception;
-
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Str;
+use Illuminate\Support\Facades\Log;
 class ServerController extends Controller
 {
     protected PterodactylSettings $pterodactylSettings;
     protected PterodactylClient $pterodactylClient;
 
-    public const ALLOWED_FILTERS = ['name', 'suspended', 'identifier', 'pterodactyl_id', 'user_id', 'product_id'];
-
-    /**
-     * Display a listing of the resource.
-     *
-     * @param  Request  $request
-     * @return LengthAwarePaginator
-     */
-    public function index(Request $request)
+    public function __construct(
+        protected ServerCreationService $serverCreationService,
+        protected ServerUpgradeService $serverUpgradeService
+    )
     {
         $this->pterodactylSettings = app(PterodactylSettings::class);
         $this->pterodactylClient = app(PterodactylClient::class, [$this->pterodactylSettings]);
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param  Server  $server
-     * @return Server|Collection|Model
-     */
-    public function show(Server $server)
-    {
-        $query = QueryBuilder::for(Server::class)
-            ->where('id', '=', $server->id)
-            ->allowedIncludes(self::ALLOWED_INCLUDES);
+    public const ALLOWED_INCLUDES = ['product', 'user'];
+    public const ALLOWED_FILTERS = ['name', 'suspended', 'identifier', 'pterodactyl_id', 'user_id', 'product_id'];
 
     /**
      * Show a list of servers.
@@ -77,51 +65,76 @@ class ServerController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Show the specified server.
      *
      * @param  Request  $request
-     * @param  Server  $server
-     * @return Server
+     * @param  string  $serverId
+     * @return ServerResource
+     *
+     * @throws ModelNotFoundException
      */
-    public function show(Request $request, string $serverId)
+    public function show(Server $server)
     {
-        $server = QueryBuilder::for(Server::class)
-            ->allowedIncludes(self::ALLOWED_INCLUDES)
-            ->where('id', $serverId)
-            ->firstOrFail();
+        // Route-model binding used (route parameter is `{server}`). Return resource with allowed includes
+        $server->loadMissing(self::ALLOWED_INCLUDES);
 
-        // Reason is captured by the model's activity log (tapActivity) — no local use required here.
-
-        $server->delete();
-
-        return $server;
+        return ServerResource::make($server->fresh());
     }
 
     /**
-     * suspend server
+     * Store a new server in the system.
      *
      * @param  Request  $request
-     * @param  Server  $server
-     * @return Server|JsonResponse
+     * @return ServerResource
+     *
+     * @throws ValidationException
      */
-    public function suspend(Request $request, Server $server)
+    public function store(CreateServerRequest $request)
     {
         $data = $request->validated();
 
-        // Reason is captured by the model's activity log (tapActivity) — no local use required here.
+        $user = User::findOrFail($data['user_id']);
+        $product = Product::with('eggs')->findOrFail($data['product_id']);
+
+        // Reserve credits BEFORE provisioning (atomic, race-safe)
+        // Use product helper for effective minimum credits
+        $minCredits = $product->effectiveMinimumCredits();
+
+        $decremented = User::where('id', $user->id)
+            ->where('credits', '>=', $minCredits)
+            ->decrement('credits', $product->price);
+
+        if ($decremented === 0) {
+            return response()->json([
+                'message' => 'User does not have enough credits to create this server.'
+            ], 402);
+        }
 
         try {
             $server = $this->serverCreationService->handle($user, $product, $data);
 
-            $user->decrement("credits", $product->price);
-
+            // Success - clear cache and fire event
+            Cache::forget('user_credits_left:' . $user->id);
             event(new ServerCreatedEvent($user, $server));
 
             return ServerResource::make($server->fresh());
         } catch (Exception $e) {
+            // Provisioning failed - refund credits
+            User::where('id', $user->id)->increment('credits', $product->price);
+            Cache::forget('user_credits_left:' . $user->id);
+
+            $correlationId = (string) Str::uuid();
+            Log::error('API server creation failed', [
+                'user_id' => $user->id,
+                'product_id' => $product->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'correlation_id' => $correlationId,
+            ]);
+
             return response()->json([
-                'message' => $e->getMessage()
-            ], 401);
+                'message' => __('Server creation failed. Please try again later. (Ref: :id)', ['id' => $correlationId])
+            ], 500);
         }
     }
 
@@ -131,7 +144,7 @@ class ServerController extends Controller
      * @param UpdateServerRequest $request
      * @param Server $server
      * @return ServerResource
-     * 
+     *
      * @throws ModelNotFoundException
      * @throws Exception
      */
@@ -171,7 +184,7 @@ class ServerController extends Controller
      * @param  UpdateServerBuildRequest  $request
      * @param  Server  $server
      * @return ServerResource|JsonResponse
-     * 
+     *
      * @throws ModelNotFoundException
      */
     public function updateBuild(UpdateServerBuildRequest $request, Server $server)
@@ -196,7 +209,7 @@ class ServerController extends Controller
      * @param  DeleteServerRequest  $request
      * @param  Server  $server
      * @return \Illuminate\Http\Response
-     * 
+     *
      * @throws ModelNotFoundException
      */
     public function destroy(DeleteServerRequest $request, Server $server)
@@ -228,7 +241,7 @@ class ServerController extends Controller
      * @param  SuspendServerRequest  $request
      * @param  Server  $server
      * @return ServerResource|JsonResponse
-     * 
+     *
      * @throws ModelNotFoundException
      */
     public function suspend(SuspendServerRequest $request, Server $server)
@@ -249,23 +262,21 @@ class ServerController extends Controller
             return response()->json(['message' => $exception->getMessage()], 500);
         }
 
-        return $server->load('product');
+        return ServerResource::make($server);
     }
 
     /**
-     * unsuspend server
+     * Unsuspend server.
      *
-     * @param  Request  $request
+     * @param  UnsuspendServerRequest  $request
      * @param  Server  $server
-     * @return Server|JsonResponse
+     * @return ServerResource|JsonResponse
+     *
+     * @throws ModelNotFoundException
      */
-    public function unSuspend(Request $request, Server $server)
+    public function unSuspend(UnsuspendServerRequest $request, Server $server)
     {
-        $request->validate([
-            'reason' => 'sometimes|string|max:320',
-        ]);
-
-        // Reason is captured by the model's activity log (tapActivity) — no local use required here.
+        $data = $request->validated();
 
         try {
             $logMessage = sprintf("The server with ID: %d was unsuspended via API", $server->id);
@@ -281,6 +292,6 @@ class ServerController extends Controller
             return response()->json(['message' => $exception->getMessage()], 500);
         }
 
-        return $server->load('product');
+        return ServerResource::make($server);
     }
 }

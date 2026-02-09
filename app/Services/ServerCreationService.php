@@ -11,6 +11,7 @@ use App\Settings\GeneralSettings;
 use App\Settings\PterodactylSettings;
 use App\Settings\ServerSettings;
 use App\Settings\UserSettings;
+use Illuminate\Support\Facades\Log;
 
 class ServerCreationService
 {
@@ -39,13 +40,16 @@ class ServerCreationService
      * @param Product $product
      * @param mixed $data
      * @return Server
-     * 
+     *
      * @throws \Exception
      */
     public function handle(User $user, Product $product, mixed $data): Server
     {
         $egg = $product->eggs->firstWhere('id', $data['egg_id']);
 
+            if (! $egg) {
+                throw new \Exception('Selected egg does not belong to the chosen product.');
+            }
         try {
             $validatedData = $this->validateAndPrepare($user, $product, $data);
 
@@ -80,7 +84,40 @@ class ServerCreationService
 
             return $server;
         } catch (\Exception $e) {
-            throw new \Exception($e->getMessage());
+            // If a local server was created, attempt to reconcile with Pterodactyl.
+            // If remote server exists, update local record and return it.
+            // If remote server does not exist, delete local record to avoid orphaning.
+            if (isset($server) && $server instanceof Server) {
+                try {
+                    $pteroAttrs = $this->pterodactylClient->findServerByExternalId($server->id);
+
+                    if ($pteroAttrs) {
+                        $server->update([
+                            'pterodactyl_id' => $pteroAttrs['id'],
+                            'identifier' => $pteroAttrs['identifier'] ?? $server->identifier,
+                        ]);
+
+                        // Return server so caller can proceed with post-creation actions
+                        return $server;
+                    }
+
+                    // Remote server not found; delete local server to avoid orphan
+                    $server->delete();
+                } catch (\Exception $inner) {
+                    // Reconciliation failed (transient network/panel outage). Do not delete local server here
+                    // as the remote state is uncertain; let upstream handle retries via a reconciliation job.
+                    Log::error('Server creation reconciliation check failed', [
+                        'server_id' => $server->id,
+                        'error' => $inner->getMessage(),
+                    ]);
+
+                    // Re-throw the original provisioning exception to ensure controller can refund/dispatch reconciliation
+                    throw $e;
+                }
+            }
+
+            // Re-throw original exception for upstream handling (controller will refund/notify/reconcile)
+            throw $e;
         }
     }
 
@@ -101,7 +138,9 @@ class ServerCreationService
         }
 
         // Check if user has enough credits to create the server.
-        $minCredits = $product->minimum_credits ?: $this->userSettings->min_credits_to_make_server;
+        // Use per-product minimum_credits, defaulting to product price if not set.
+        // Backward compatibility: some legacy rows use -1 to indicate "use product price".
+        $minCredits = $product->effectiveMinimumCredits();
 
         if ($user->credits < $minCredits) {
             throw new \Exception(

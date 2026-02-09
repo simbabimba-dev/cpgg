@@ -29,8 +29,8 @@ use Illuminate\Support\Facades\Request as FacadesRequest;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Support\Facades\Cache;
-use App\Jobs\HandlePostServerCreationJob;
-use App\Jobs\ReconcileServerCreationJob;
+use App\Services\ServerCreationService;
+use App\Events\ServerCreatedEvent;
 
 class ServerController extends Controller
 {
@@ -119,7 +119,6 @@ class ServerController extends Controller
                 ->with('error', __('Please wait a moment before creating another server.'));
         }
 
-        $lockAcquired = true;
         try {
             $validationResult = $this->validateServerCreation($request);
             if ($validationResult) return $validationResult;
@@ -133,131 +132,66 @@ class ServerController extends Controller
                 'billing_priority' => ['nullable', new Enum(BillingPriority::class)],
             ]);
 
-            // NOTE: Potential cross-system consistency issue:
-            // The server (local DB record and remote Pterodactyl resource) is created here
-            // BEFORE we atomically decrement the user's credits. If the credit decrement
-            // fails (e.g. insufficient credits), we attempt to delete the created local
-            // server record below, but the remote Pterodactyl server may still exist and
-            // become orphaned. Deleting the local model does not guarantee the remote
-            // resource is removed unless `createServer`/`delete` also handle the remote API.
-            //
-            // Recommendations:
-            //  - Prefer an atomic reserve/decrement of credits before calling `createServer()`;
-            //    if `createServer()` later fails, refund the credits (increment back) reliably.
-            //  - Alternatively, create a local 'pending' record, attempt remote creation, and
-            //    only commit (finalize) the credits after the remote server is confirmed.
-            //  - Ensure cleanup includes removal of the remote Pterodactyl server (call the
-            //    Pterodactyl API explicitly) and add retry/alerting for failures.
-            //
-            // The existing cache lock prevents concurrent creates per user but does not
-            // solve cross-system consistency with the panel — add compensation logic.
+            $user = $request->user();
+            $product = Product::with('eggs')->findOrFail($request->input('product'));
 
-            // Reserve credits first (atomic decrement). This prevents races where another
-            // operation spends the credits between validation and charging."
-            // FIX APPLIED BELOW (& IN ReconcileServerCreationJob.php)
-            $product = Product::findOrFail($request->input('product'));
-            $price = $product->price;
-            $userId = $request->user()->id;
+            // Reserve credits BEFORE provisioning (atomic, race-safe)
+            // Use product helper for effective minimum credits
+            $minCredits = $product->effectiveMinimumCredits();
 
-            $decremented = User::where('id', $userId)
-                ->where('credits', '>=', $price)
-                ->decrement('credits', $price);
+            $decremented = User::where('id', $user->id)
+                ->where('credits', '>=', $minCredits)
+                ->decrement('credits', $product->price);
 
             if ($decremented === 0) {
                 return redirect()->route('servers.index')
                     ->with('error', __('Not enough :credits to create server', ['credits' => $this->generalSettings->credits_display_name]));
             }
 
-            // attempt provisioning
-            $server = $this->createServer($request);
+            try {
+                // Map request data to format expected by ServerCreationService
+                $data = [
+                    'name' => $request->input('name'),
+                    'location_id' => $request->input('location'),
+                    'egg_id' => $request->input('egg'),
+                    'product_id' => $request->input('product'),
+                    'egg_variables' => $request->input('egg_variables'),
+                    'billing_priority' => $request->input('billing_priority', $product->default_billing_priority),
+                ];
 
-            if (!$server) {
-                // Allocation or node failure - refund credits and return
-                try {
-                    User::where('id', $userId)->increment('credits', $price);
-                } catch (\Throwable $e) {
-                    Log::error('Failed to refund credits after server creation allocation failure', ['user_id' => $userId, 'price' => $price, 'error' => $e->getMessage()]);
+                // Ensure the selected egg belongs to the product (defensive check)
+                if (! $product->eggs->firstWhere('id', $data['egg_id'])) {
+                    throw new \Exception('Selected egg does not belong to the chosen product.');
                 }
 
-                return redirect()->route('servers.index')
-                    ->with('error', __('Server creation failed'));
-            }
+                // Use Ferks' ServerCreationService for provisioning
+                $server = app(ServerCreationService::class)->handle($user, $product, $data);
 
-            // If the Pterodactyl provisioning succeeded within createServer, set pterodactyl_id
-            if ($server->pterodactyl_id) {
-                Cache::forget('user_credits_left:' . $userId);
-                HandlePostServerCreationJob::dispatch($userId, $server->id);
-
-                try {
-                    $lock->release();
-                    $lockAcquired = false;
-                } catch (\Throwable $e) {
-                    Log::debug('Failed to release server creation lock: ' . $e->getMessage());
-                }
+                // Success - clear cache and fire event
+                Cache::forget('user_credits_left:' . $user->id);
+                event(new ServerCreatedEvent($user, $server));
 
                 return redirect()->route('servers.index')
                     ->with('success', __('Server created'));
-            }
+            } catch (Exception $e) {
+                // Provisioning failed - refund credits
+                User::where('id', $user->id)->increment('credits', $product->price);
+                Cache::forget('user_credits_left:' . $user->id);
 
-            // Provisioning reported failure. Try to verify if the server actually exists on Pterodactyl
-            try {
-                $pteroAttrs = $this->pterodactyl->findServerByExternalId($server->id);
-            } catch (\Throwable $e) {
-                Log::error('Failed to verify Pterodactyl server after provisioning failure', ['server_id' => $server->id, 'error' => $e->getMessage()]);
-                // Enqueue reconciliation job and inform user; do not refund here as job will handle it
-                ReconcileServerCreationJob::dispatch($server->id, $price);
-
-                return redirect()->route('servers.index')
-                    ->with('error', __('Server creation failed and will be reconciled shortly'));
-            }
-
-            if ($pteroAttrs) {
-                // Remote server exists — update local record and proceed as success
-                $server->update([
-                    'pterodactyl_id' => $pteroAttrs['id'],
-                    'identifier' => $pteroAttrs['identifier'] ?? $server->identifier,
+                $correlationId = (string) \Illuminate\Support\Str::uuid();
+                Log::error('Server creation failed', [
+                    'user_id' => $user->id,
+                    'product_id' => $product->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                    'correlation_id' => $correlationId,
                 ]);
 
-                Cache::forget('user_credits_left:' . $userId);
-                HandlePostServerCreationJob::dispatch($userId, $server->id);
-
-                try {
-                    $lock->release();
-                    $lockAcquired = false;
-                } catch (\Throwable $e) {
-                    Log::debug('Failed to release server creation lock: ' . $e->getMessage());
-                }
-
                 return redirect()->route('servers.index')
-                    ->with('success', __('Server created'));
+                    ->with('error', __('Server creation failed. Please try again later. (Ref: :id)', ['id' => $correlationId]));
             }
-
-            // Remote server not found — attempt refund and delete local record
-            try {
-                User::where('id', $userId)->increment('credits', $price);
-
-                // Clear cache and delete local server (deleting hook will ignore 404s on pterodactyl)
-                Cache::forget('user_credits_left:' . $userId);
-                $server->delete();
-
-                return redirect()->route('servers.index')
-                    ->with('error', __('Server creation failed'));
-            } catch (\Throwable $e) {
-                Log::error('Failed to refund after failed server creation and no remote server found', ['server_id' => $server->id, 'user_id' => $userId, 'error' => $e->getMessage()]);
-
-                // Dispatch reconcile job to retry refund and cleanup later
-                ReconcileServerCreationJob::dispatch($server->id, $price);
-
-                return redirect()->route('servers.index')
-                    ->with('error', __('Server creation failed and will be reconciled shortly'));
-            }        } finally {
-            if ($lockAcquired) {
-                try {
-                    $lock->release();
-                } catch (\Throwable $e) {
-                    Log::debug('Failed to release server creation lock: ' . $e->getMessage());
-                }
-            }
+        } finally {
+            $lock->release();
         }
     }
 
@@ -303,12 +237,8 @@ class ServerController extends Controller
             return __('You can not create any more Servers with this product!');
         }
 
-        // Determine effective minimum credits: if minimum_credits is not set, use product price.
-        if (is_null($product->minimum_credits)) {
-            $minCredits = $product->price;
-        } else {
-            $minCredits = $product->minimum_credits;
-        }
+        // Determine effective minimum credits using Product helper
+        $minCredits = $product->effectiveMinimumCredits();
 
         if ($user->credits < $minCredits) {
             return 'You do not have the required amount of ' . $this->generalSettings->credits_display_name . ' to use this product!';
@@ -381,72 +311,6 @@ class ServerController extends Controller
                 'server_id' => $server->id,
                 'error' => $e->getMessage()
             ]);
-        }
-    }
-
-    private function createServer(Request $request): ?Server
-    {
-        $product = Product::findOrFail($request->input('product'));
-        $egg = $product->eggs()->findOrFail($request->input('egg'));
-        $node = $this->findAvailableNode($request->input('location'), $product);
-
-        if (!$node) return null;
-
-        $server = $request->user()->servers()->create([
-            'name' => $request->input('name'),
-            'product_id' => $product->id,
-            'last_billed' => Carbon::now(),
-            'billing_priority' => $request->input('billing_priority', $product->default_billing_priority),
-        ]);
-
-        $allocationId = $this->pterodactyl->getFreeAllocationId($node);
-        if (!$allocationId) {
-            Log::error('No AllocationID found.', [
-                'server_id' => $server->id,
-                'node_id' => $node->id,
-            ]);
-            // Cannot proceed without allocation - remove local record
-            $server->delete();
-            return null;
-        }
-
-        $response = $this->pterodactyl->createServer($server, $egg, $allocationId, $request->input('egg_variables'));
-        if ($response->failed()) {
-            // Creation failed from the API side. Do NOT delete the local record here.
-            // The controller will attempt to verify if the server actually exists on
-            // Pterodactyl (by searching for our external_id) and handle refunds/cleanup.
-            Log::error('Failed to create server on Pterodactyl', [
-                'server_id' => $server->id,
-                'status' => $response->status(),
-                'error' => $response->json()
-            ]);
-
-            return $server; // Return the local server so the caller can reconcile
-        }
-
-        $serverAttributes = $response->json()['attributes'];
-        $server->update([
-            'pterodactyl_id' => $serverAttributes['id'],
-            'identifier' => $serverAttributes['identifier']
-        ]);
-
-        return $server;
-    }
-
-    private function handlePostCreation(User $user, Server $server): void
-    {
-        try {
-            if ($this->discordSettings->role_for_active_clients &&
-                $user->discordUser &&
-                $user->servers->count() >= 1
-            ) {
-                $user->discordUser->addOrRemoveRole(
-                    'add',
-                    $this->discordSettings->role_id_for_active_clients
-                );
-            }
-        } catch (Exception $e) {
-            Log::debug('Discord role update failed: ' . $e->getMessage());
         }
     }
 

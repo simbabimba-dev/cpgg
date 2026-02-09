@@ -155,6 +155,21 @@ class Product extends Model
         return Currency::formatForDisplay($this->minimum_credits);
     }
 
+    /**
+     * Returns the numeric effective minimum credits for the product.
+     * Backwards compatible with legacy sentinel -1.
+     *
+     * @return int
+     */
+    public function effectiveMinimumCredits(): int
+    {
+        if (is_null($this->minimum_credits) || $this->minimum_credits == -1) {
+            return (int) $this->price;
+        }
+
+        return (int) $this->minimum_credits;
+    }
+
     public function getDefaultBillingPriorityLabelAttribute()
     {
         return $this->default_billing_priority->label();
