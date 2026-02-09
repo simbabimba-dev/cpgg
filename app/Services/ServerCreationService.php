@@ -11,6 +11,7 @@ use App\Settings\GeneralSettings;
 use App\Settings\PterodactylSettings;
 use App\Settings\ServerSettings;
 use App\Settings\UserSettings;
+use Illuminate\Support\Facades\Log;
 
 class ServerCreationService
 {
@@ -80,6 +81,44 @@ class ServerCreationService
 
             return $server;
         } catch (\Exception $e) {
+            // If a local server was created, attempt to reconcile with Pterodactyl.
+            // If remote server exists, update local record and return it.
+            // If remote server does not exist, delete local record to avoid orphaning.
+            if (isset($server) && $server instanceof Server) {
+                try {
+                    $pteroAttrs = $this->pterodactylClient->findServerByExternalId($server->id);
+
+                    if ($pteroAttrs) {
+                        $server->update([
+                            'pterodactyl_id' => $pteroAttrs['id'],
+                            'identifier' => $pteroAttrs['identifier'] ?? $server->identifier,
+                        ]);
+
+                        // Return server so caller can proceed with post-creation actions
+                        return $server;
+                    }
+
+                    // Remote server not found; delete local server to avoid orphan
+                    $server->delete();
+                } catch (\Exception $inner) {
+                    Log::error('Server creation reconciliation check failed', [
+                        'server_id' => $server->id,
+                        'error' => $inner->getMessage(),
+                    ]);
+
+                    // Attempt to delete local server; if it fails, log and continue to rethrow
+                    try {
+                        $server->delete();
+                    } catch (\Throwable $deleteExc) {
+                        Log::error('Failed to delete server after failed creation', [
+                            'server_id' => $server->id,
+                            'error' => $deleteExc->getMessage(),
+                        ]);
+                    }
+                }
+            }
+
+            // Re-throw original exception for upstream handling (controller will refund/notify/reconcile)
             throw new \Exception($e->getMessage());
         }
     }
@@ -101,8 +140,13 @@ class ServerCreationService
         }
 
         // Check if user has enough credits to create the server.
-        // Use per-product minimum_credits, defaulting to product price if not set (null or -1)
-        $minCredits = $product->minimum_credits ?? $product->price;
+        // Use per-product minimum_credits, defaulting to product price if not set.
+        // Backward compatibility: some legacy rows use -1 to indicate "use product price".
+        if (is_null($product->minimum_credits) || $product->minimum_credits == -1) {
+            $minCredits = $product->price;
+        } else {
+            $minCredits = $product->minimum_credits;
+        }
 
         if ($user->credits < $minCredits) {
             throw new \Exception(
