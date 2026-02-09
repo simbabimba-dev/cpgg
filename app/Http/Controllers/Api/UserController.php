@@ -142,14 +142,13 @@ class UserController extends Controller
     }
 
     /**
-     * Increments the credits/server_limit of the user.
+     * increments the users credits or/and server_limit
      *
-     * @param  IncrementRequest  $request
-     * @param  User  $user
-     * @return UserResource
+     * @param  Request  $request
+     * @param  int  $id
+     * @return User
      *
      * @throws ValidationException
-     * @throws ModelNotFoundException
      */
     public function increment(IncrementRequest $request, User $user)
     {
@@ -169,13 +168,12 @@ class UserController extends Controller
     }
 
     /**
-     * Decrements the credits/server_limit of the user.
+     * decrements the users credits or/and server_limit
      *
-     * @param  DecrementRequest  $request
-     * @param  User  $user
-     * @return UserResource
+     * @param  Request  $request
+     * @param  int  $id
+     * @return User
      *
-     * @throws ModelNotFoundException
      * @throws ValidationException
      */
     public function decrement(DecrementRequest $request, User $user)
@@ -194,17 +192,24 @@ class UserController extends Controller
     }
 
     /**
-     * Suspend the user and their servers.
+     * Suspends the user
      *
      * @param  Request  $request
-     * @param  User  $user
-     * @return UserResource|\Illuminate\Http\JsonResponse
-     * 
-     * @throws ModelNotFoundException
+     * @param  int  $id
+     * @return User
+     *
+     * @throws ValidationException
      */
     public function suspend(SuspendUserRequest $request, User $user)
     {
-        $data = $request->validated();
+        $discordUser = DiscordUser::find($id);
+        $user = $discordUser ? $discordUser->user : User::findOrFail($id);
+
+        $request->validate([
+            'reason' => 'sometimes|string|max:320',
+        ]);
+
+        $reason = $request->input('reason');
 
         if ($user->isSuspended()) {
             return response()->json([
@@ -222,21 +227,28 @@ class UserController extends Controller
         
         $user->suspend();
 
-        return UserResource::make($user);
+        return $user;
     }
 
     /**
-     * Unsuspend the user and their servers if they has suficient credits.
+     * Unsuspend the user
      *
      * @param  Request  $request
-     * @param  User  $user
-     * @return UserResource|\Illuminate\Http\JsonResponse
-     * 
-     * @throws ModelNotFoundException
+     * @param  int  $id
+     * @return User
+     *
+     * @throws ValidationException
      */
     public function unsuspend(UnsuspendUserRequest $request, User $user)
     {
-        $data = $request->validated();
+        $discordUser = DiscordUser::find($id);
+        $user = $discordUser ? $discordUser->user : User::findOrFail($id);
+
+        $request->validate([
+            'reason' => 'sometimes|string|max:320',
+        ]);
+
+        $reason = $request->input('reason');
 
         if (!$user->isSuspended()) {
             return response()->json([
@@ -254,95 +266,26 @@ class UserController extends Controller
 
         $user->unSuspend();
 
-        return UserResource::make($user);
+        return $user;
     }
 
     /**
-     * Create a new user in the system.
-     * 
-     * @param CreateUserRequest  $request
-     * @return UserResource
-     * 
-     * @throws ValidationException
+     * Remove the specified resource from storage.
+     *
+     * @param  Request  $request
+     * @param  int  $id
+     * @return Response
      */
     public function store(CreateUserRequest $request, UserSettings $userSettings)
     {
-        $data = $request->validated();
+        $discordUser = DiscordUser::find($id);
+        $user = $discordUser ? $discordUser->user : User::findOrFail($id);
 
-        DB::beginTransaction();
+        $request->validate([
+            'reason' => 'sometimes|string|max:320',
+        ]);
 
-        try {
-            $role_id = $data['role_id'];
-            unset($data['role_id']);
-
-            $user = User::create([
-                ...$data,
-                'credits' => isset($data['credits']) ? $this->currencyHelper->prepareForDatabase($data['credits']) : $userSettings->initial_credits,
-                'server_limit' => $data['server_limit'] ?? $userSettings->initial_server_limit,
-                'referral_code' => $this->createReferralCode(),
-            ]);
-
-            $user->syncRoles([$role_id]);
-
-            $this->incrementReferralUserCredits($user, $data);
-
-            $response = $this->pterodactyl->application->post('/application/users', [
-                'external_id' => "0",
-                'username' => $data['name'],
-                'email' => $data['email'],
-                'first_name' => $data['name'],
-                'last_name' => $data['name'],
-                'password' => $data['password'],
-                'root_admin' => false,
-                'language' => 'en',
-            ]);
-
-            if ($response->failed()) {
-                throw ValidationException::withMessages([
-                    'pterodactyl_error_message' => $response->toException()->getMessage(),
-                    'pterodactyl_error_status' => $response->toException()->getCode(),
-                ]);
-            }
-
-            $user->update([
-                'pterodactyl_id' => $response->json()['attributes']['id'],
-            ]);
-
-            $user->sendEmailVerificationNotification();
-
-            DB::commit();
-
-            return UserResource::make($user);
-        } catch (Exception $e) {
-            DB::rollBack();
-
-            throw ValidationException::withMessages([
-                'pterodactyl_error_message' => $e->getMessage(),
-                'pterodactyl_error_status' => $e->getCode(),
-            ]);
-        };
-    }
-
-    /**
-     * Remove the specified user from the system.
-     *
-     * @param  Request  $request
-     * @param  User  $user
-     * @return \Illuminate\Http\Response
-     * 
-     * @throws ModelNotFoundException
-     */
-    public function destroy(DeleteUserRequest $request, User $user)
-    {
-        $data = $request->validated();
-
-        $logMessage = sprintf("The user %s (ID: %d) was deleted via API", $user->name, $user->id);
-
-        if (!empty($data['reason'])) {
-            $logMessage .= " | Reason: " . $data['reason'];
-        }
-
-        activity()->performedOn($user)->log($logMessage);
+        $reason = $request->input('reason');
 
         $user->delete();
 

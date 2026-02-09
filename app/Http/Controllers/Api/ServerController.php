@@ -31,17 +31,31 @@ class ServerController extends Controller
     protected PterodactylSettings $pterodactylSettings;
     protected PterodactylClient $pterodactylClient;
 
-    public function __construct(
-        protected ServerCreationService $serverCreationService,
-        protected ServerUpgradeService $serverUpgradeService
-    )
+    public const ALLOWED_FILTERS = ['name', 'suspended', 'identifier', 'pterodactyl_id', 'user_id', 'product_id'];
+
+    /**
+     * Display a listing of the resource.
+     *
+     * @param  Request  $request
+     * @return LengthAwarePaginator
+     */
+    public function index(Request $request)
     {
         $this->pterodactylSettings = app(PterodactylSettings::class);
         $this->pterodactylClient = app(PterodactylClient::class, [$this->pterodactylSettings]);
     }
 
-    public const ALLOWED_INCLUDES = ['product', 'user'];
-    public const ALLOWED_FILTERS = ['name', 'suspended', 'identifier', 'pterodactyl_id', 'user_id', 'product_id'];
+    /**
+     * Display the specified resource.
+     *
+     * @param  Server  $server
+     * @return Server|Collection|Model
+     */
+    public function show(Server $server)
+    {
+        $query = QueryBuilder::for(Server::class)
+            ->where('id', '=', $server->id)
+            ->allowedIncludes(self::ALLOWED_INCLUDES);
 
     /**
      * Show a list of servers.
@@ -63,13 +77,11 @@ class ServerController extends Controller
     }
 
     /**
-     * Show the specified server.
+     * Remove the specified resource from storage.
      *
      * @param  Request  $request
-     * @param  string  $serverId
-     * @return ServerResource
-     * 
-     * @throws ModelNotFoundException
+     * @param  Server  $server
+     * @return Server
      */
     public function show(Request $request, string $serverId)
     {
@@ -78,23 +90,25 @@ class ServerController extends Controller
             ->where('id', $serverId)
             ->firstOrFail();
 
-        return ServerResource::make($server);
+        // Reason is captured by the model's activity log (tapActivity) — no local use required here.
+
+        $server->delete();
+
+        return $server;
     }
 
     /**
-     * Store a new server in the system.
+     * suspend server
      *
      * @param  Request  $request
-     * @return ServerResource
-     * 
-     * @throws ValidationException
+     * @param  Server  $server
+     * @return Server|JsonResponse
      */
-    public function store(CreateServerRequest $request)
+    public function suspend(Request $request, Server $server)
     {
         $data = $request->validated();
 
-        $user = User::findOrFail($data['user_id']);
-        $product = Product::with('eggs')->findOrFail($data['product_id']);
+        // Reason is captured by the model's activity log (tapActivity) — no local use required here.
 
         try {
             $server = $this->serverCreationService->handle($user, $product, $data);
@@ -235,21 +249,23 @@ class ServerController extends Controller
             return response()->json(['message' => $exception->getMessage()], 500);
         }
 
-        return ServerResource::make($server);
+        return $server->load('product');
     }
 
     /**
-     * Unsuspend server.
+     * unsuspend server
      *
-     * @param  UnsuspendServerRequest  $request
+     * @param  Request  $request
      * @param  Server  $server
-     * @return ServerResource|JsonResponse
-     * 
-     * @throws ModelNotFoundException
+     * @return Server|JsonResponse
      */
-    public function unSuspend(UnsuspendServerRequest $request, Server $server)
+    public function unSuspend(Request $request, Server $server)
     {
-        $data = $request->validated();
+        $request->validate([
+            'reason' => 'sometimes|string|max:320',
+        ]);
+
+        // Reason is captured by the model's activity log (tapActivity) — no local use required here.
 
         try {
             $logMessage = sprintf("The server with ID: %d was unsuspended via API", $server->id);
@@ -265,6 +281,6 @@ class ServerController extends Controller
             return response()->json(['message' => $exception->getMessage()], 500);
         }
 
-        return ServerResource::make($server);
+        return $server->load('product');
     }
 }

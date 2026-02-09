@@ -129,6 +129,22 @@ class User extends Authenticatable implements MustVerifyEmail
 
             $user->discordUser()->delete();
 
+            // --- Referral logic ---
+            // Using DB::table to update referral records directly to avoid triggering additional Eloquent events
+            // when performing cascading deletes. We update only the exact referral rows using the composite
+            // key (referral_id + registered_user_id) to avoid affecting unrelated records.
+            $referralRecords = DB::table('user_referrals')->where('registered_user_id', $user->id)->get();
+            foreach ($referralRecords as $ref) {
+                DB::table('user_referrals')
+                    ->where('referral_id', $ref->referral_id)
+                    ->where('registered_user_id', $ref->registered_user_id)
+                    ->update([
+                        'deleted_at' => now(),
+                        'deleted_username' => $user->name,
+                        'deleted_user_id' => $user->id,
+                    ]);
+            }
+
             $user->pterodactyl->application->delete("/application/users/{$user->pterodactyl_id}");
         });
     }
@@ -197,7 +213,101 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function coupons()
     {
-        return $this->belongsToMany(Coupon::class, 'user_coupons');
+        return $this->belongsToMany(Coupon::class, 'user_coupons')->withPivot('uses')->withTimestamps();
+    }
+
+    // tap into activity log to convert db value to display value, attach API metadata and add pseudo-attributes for UI
+    public function tapActivity(Activity $activity, string $eventName)
+    {
+        $propertiesArray = $activity->properties->toArray();
+        $properties = collect($propertiesArray);
+
+        // Preserve existing credits formatting for created/deleted events and return early
+        if ($eventName === 'deleted' && isset($propertiesArray['old']['credits'])) {
+            $credits = $propertiesArray['old']['credits'];
+            if ($credits > 1000) {
+                $propertiesArray['old']['credits'] = (string) Currency::formatForDisplay($credits);
+            } else {
+                $propertiesArray['old']['credits'] = (string) $credits;
+            }
+            $activity->properties = $propertiesArray;
+            return;
+        } elseif ($eventName === 'created' && isset($propertiesArray['attributes']['credits'])) {
+            $credits = $propertiesArray['attributes']['credits'];
+            if ($credits > 1000) {
+                $propertiesArray['attributes']['credits'] = (string) Currency::formatForDisplay($credits);
+            } else {
+                $propertiesArray['attributes']['credits'] = (string) $credits;
+            }
+            $activity->properties = $propertiesArray;
+            return;
+        }
+
+        $request = request();
+        $apiMemo = $request->attributes->get('application_api_memo');
+        $reason = $request->input('reason');
+
+        // Attach top-level reason/lines and via/api_memo for updated/deleted events
+        if (in_array($eventName, ['updated', 'deleted'])) {
+            if (!empty($reason)) {
+                $properties->put('reason', $reason);
+                $lines = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', $reason))));
+                if (!empty($lines)) {
+                    $properties->put('reason_lines', $lines);
+                }
+            }
+
+            if ($apiMemo) {
+                $properties->put('via', 'api');
+                $properties->put('api_memo', $apiMemo);
+            } elseif ($request->is('api/*')) {
+                $properties->put('via', 'api');
+            } else {
+                $properties->put('via', 'web');
+            }
+        }
+
+        if ($eventName === 'updated') {
+            // If suspended attribute changed, integrate notes into the attributes list (so UI shows it in the same Updated block)
+            if ($properties->has('attributes') && array_key_exists('suspended', $properties->get('attributes'))) {
+                $attrs = $properties->get('attributes');
+                $olds = $properties->get('old', []);
+
+                // Add separate pseudo-attributes so each appears on its own line in the Updated list
+                if (!empty($reason)) {
+                    $attrs['Reason'] = $reason;
+                    // set corresponding old value to null so blade renders it as an info line
+                    $olds['Reason'] = null;
+                }
+
+                if ($apiMemo) {
+                    $attrs['Via'] = 'api';
+                    $olds['Via'] = null;
+
+                    $attrs['API Memo'] = $apiMemo;
+                    $olds['API Memo'] = null;
+                } else {
+                    // show that it was done via web for non-API requests
+                    $attrs['Via'] = 'web';
+                    $olds['Via'] = null;
+                }
+
+                $properties->put('attributes', $attrs);
+                $properties->put('old', $olds);
+
+                // Set causer to authenticated user if present; do NOT attach ApplicationApi or token
+                if (auth()->check()) {
+                    $activity->causer_id = auth()->id();
+                    $activity->causer_type = auth()->user()::class;
+                }
+
+                $activity->properties = $properties->toArray();
+                return;
+            }
+        }
+
+        // Default: write back any modified properties
+        $activity->properties = $properties->toArray();
     }
 
     /**
@@ -330,9 +440,9 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         $referee = DB::table('user_referrals')->where("registered_user_id", $this->id)->first();
 
-        if ($referee) {
-            $referee = User::where("id", $referee->referral_id)->firstOrFail();
-            return $referee;
+        if ($referee && $referee->referral_id) {
+            $referrer = User::withTrashed()->find($referee->referral_id);
+            return $referrer;
         }
         
         return null;
