@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\Server;
 use App\Models\User;
 use App\Notifications\ServerCreationError;
+use App\Rules\EggBelongsToProduct;
 use App\Settings\DiscordSettings;
 use Carbon\Carbon;
 use App\Settings\UserSettings;
@@ -26,9 +27,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Request as FacadesRequest;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rules\Enum;
+use Throwable;
 
 
 class ServerController extends Controller
@@ -112,6 +117,16 @@ class ServerController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $this->checkPermission(self::CREATE_PERMISSION);
+
+        $rateLimiterKey = 'server-create:' . Auth::id();
+        if (RateLimiter::tooManyAttempts($rateLimiterKey, 6)) {
+            return redirect()->route('servers.index')
+                ->with('error', __('Please wait :seconds seconds before creating another server.', [
+                    'seconds' => RateLimiter::availableIn($rateLimiterKey),
+                ]));
+        }
+
         $lockKey = 'server_create_lock_' . Auth::id();
         if (Cache::has($lockKey)) {
             return redirect()->route('servers.index')
@@ -125,11 +140,29 @@ class ServerController extends Controller
         $request->validate([
             'name' => 'required|max:191',
             'location' => 'required|exists:locations,id',
-            'egg' => 'required|exists:eggs,id',
+            'egg' => ['required', 'exists:eggs,id', new EggBelongsToProduct],
             'product' => 'required|exists:products,id',
             'egg_variables' => 'nullable|string',
             'billing_priority' => ['nullable', new Enum(BillingPriority::class)],
         ]);
+
+        $product = Product::findOrFail($request->input('product'));
+        $egg = $product->eggs()->findOrFail($request->input('egg'));
+        $submittedVariables = $this->parseSubmittedEggVariables($request->input('egg_variables'));
+        try {
+            $validatedVariables = $this->validateAndNormalizeEggVariables($egg, $submittedVariables);
+        } catch (ValidationException $exception) {
+            Log::warning('Server creation blocked due to invalid deployment variables', [
+                'user_id' => Auth::id(),
+                'egg_id' => $egg->id,
+                'product_id' => $product->id,
+                'submitted_keys' => array_keys($submittedVariables),
+                'errors' => $exception->errors(),
+            ]);
+
+            throw $exception;
+        }
+        $request->merge(['egg_variables' => $validatedVariables]);
 
         $server = $this->createServer($request);
 
@@ -138,6 +171,7 @@ class ServerController extends Controller
                 ->with('error', __('Server creation failed'));
         }
 
+        RateLimiter::hit($rateLimiterKey, 60);
         $this->handlePostCreation($request->user(), $server);
 
         return redirect()->route('servers.index')
@@ -353,14 +387,16 @@ class ServerController extends Controller
             return redirect()->route('servers.index')
                 ->with('success', __('Server removed'));
         } catch (Exception $e) {
+            $errorId = (string) Str::uuid();
             Log::error('Server deletion failed', [
+                'error_id' => $errorId,
                 'server_id' => $server->id,
                 'pterodactyl_id' => $server->pterodactyl_id,
-                'error' => $e->getMessage()
+                'exception' => $e,
             ]);
 
             return redirect()->route('servers.index')
-                ->with('error', __('Server removal failed: ') . $e->getMessage());
+                ->with('error', __('Server removal failed. Reference: :id', ['id' => $errorId]));
         }
     }
 
@@ -391,8 +427,15 @@ class ServerController extends Controller
             return redirect()->route('servers.index')
                 ->with('success', __('Server canceled'));
         } catch (Exception $e) {
+            $errorId = (string) Str::uuid();
+            Log::error('Server cancellation failed', [
+                'error_id' => $errorId,
+                'server_id' => $server->id,
+                'exception' => $e,
+            ]);
+
             return redirect()->route('servers.index')
-                ->with('error', __('Server cancellation failed: ') . $e->getMessage());
+                ->with('error', __('Server cancellation failed. Reference: :id', ['id' => $errorId]));
         }
     }
 
@@ -484,15 +527,17 @@ class ServerController extends Controller
             return redirect()->route('servers.show', ['server' => $server->id])
                 ->with('success', __('Server Successfully Upgraded'));
         } catch (Exception $e) {
+            $errorId = (string) Str::uuid();
             Log::error('Server upgrade failed', [
+                'error_id' => $errorId,
                 'server_id' => $server->id,
                 'old_product' => $oldProduct->id,
                 'new_product' => $newProduct->id,
-                'error' => $e->getMessage()
+                'exception' => $e,
             ]);
 
             return redirect()->route('servers.show', ['server' => $server->id])
-                ->with('error', __('Upgrade failed: ') . $e->getMessage());
+                ->with('error', __('Upgrade failed. Reference: :id', ['id' => $errorId]));
         }
     }
 
@@ -601,38 +646,185 @@ class ServerController extends Controller
 
     public function validateDeploymentVariables(Request $request)
     {
-        $variables = $request->input('variables');
+        $this->checkPermission(self::CREATE_PERMISSION);
 
-        $errors = [];
+        $validator = Validator::make($request->all(), [
+            'egg_id' => ['required', 'integer', 'exists:eggs,id', new EggBelongsToProduct],
+            'product_id' => 'required|string|exists:products,id',
+            'variables' => 'nullable|array',
+        ]);
 
-        foreach ($variables as $variable) {
-            $rules = $variable['rules'];
-            $envVariable = $variable['env_variable'];
-            $filledValue = $variable['filled_value'];
-
-            $validator = Validator::make(
-                [$envVariable => $filledValue],
-                [$envVariable => $rules]
-            );
-
-            $validator->setAttributeNames([
-                $envVariable => $variable['name'],
-            ]);
-
-            if ($validator->fails()) {
-                $errors[$envVariable] = $validator->errors()->get($envVariable);
-            }
+        if ($validator->fails()) {
+            return response()->json([
+                'errors' => $validator->errors(),
+            ], 422);
         }
 
-        if (!empty($errors)) {
+        $data = $validator->validated();
+
+        $product = Product::find($data['product_id']);
+        if (!$product) {
             return response()->json([
-                'errors' => $errors
+                'errors' => [
+                    'product_id' => [__('The selected product is invalid.')],
+                ],
             ], 422);
+        }
+
+        $egg = $product->eggs()->find($data['egg_id']);
+        if (!$egg) {
+            return response()->json([
+                'errors' => [
+                    'egg_id' => [__('The selected egg is invalid for this product.')],
+                ],
+            ], 422);
+        }
+
+        try {
+            $variables = $this->validateAndNormalizeEggVariables($egg, $data['variables'] ?? []);
+        } catch (ValidationException $exception) {
+            Log::warning('Deployment variable validation tampering detected', [
+                'user_id' => Auth::id(),
+                'egg_id' => $egg->id,
+                'product_id' => $product->id,
+                'submitted_keys' => array_keys($data['variables'] ?? []),
+                'errors' => $exception->errors(),
+            ]);
+
+            return response()->json([
+                'errors' => $exception->errors(),
+            ], 422);
+        } catch (Throwable $exception) {
+            $errorId = (string) Str::uuid();
+            Log::error('Unexpected deployment variable validator failure', [
+                'error_id' => $errorId,
+                'user_id' => Auth::id(),
+                'egg_id' => $egg->id,
+                'product_id' => $product->id,
+                'exception' => $exception,
+            ]);
+
+            return response()->json([
+                'message' => __('Unable to validate deployment variables right now.'),
+                'error_id' => $errorId,
+            ], 500);
         }
 
         return response()->json([
             'success' => true,
             'variables' => $variables,
         ]);
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function parseSubmittedEggVariables(mixed $rawEggVariables): array
+    {
+        if (is_null($rawEggVariables) || $rawEggVariables === '') {
+            return [];
+        }
+
+        $variables = $rawEggVariables;
+        if (is_string($rawEggVariables)) {
+            $variables = json_decode($rawEggVariables, true);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($variables)) {
+                throw ValidationException::withMessages([
+                    'egg_variables' => [__('The deployment variables payload is invalid.')],
+                ]);
+            }
+        }
+
+        if (!is_array($variables)) {
+            throw ValidationException::withMessages([
+                'egg_variables' => [__('The deployment variables payload must be an object.')],
+            ]);
+        }
+
+        foreach ($variables as $key => $value) {
+            if (!is_string($key) || $key === '') {
+                throw ValidationException::withMessages([
+                    'egg_variables' => [__('The deployment variables payload contains an invalid key.')],
+                ]);
+            }
+
+            if (!is_scalar($value) && !is_null($value)) {
+                throw ValidationException::withMessages([
+                    'egg_variables' => [__('Each deployment variable value must be a string.')],
+                ]);
+            }
+        }
+
+        return $variables;
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function validateAndNormalizeEggVariables(Egg $egg, array $submittedVariables): array
+    {
+        $environment = collect($egg->environment ?? [])->keyBy('env_variable');
+        $errors = [];
+        $normalized = [];
+
+        foreach ($submittedVariables as $envKey => $value) {
+            $definition = $environment->get($envKey);
+
+            if (!$definition) {
+                $errors[$envKey][] = __('Unknown deployment variable.');
+                continue;
+            }
+
+            if (empty($definition['user_editable'])) {
+                $errors[$envKey][] = __('This deployment variable is not user editable.');
+                continue;
+            }
+
+            $normalized[$envKey] = is_null($value) ? null : trim((string) $value);
+        }
+
+        foreach ($environment as $envKey => $definition) {
+            $isEditable = !empty($definition['user_editable']);
+            $defaultValue = $definition['default_value'] ?? null;
+            $rules = $definition['rules'] ?? 'nullable|string';
+            $displayName = $definition['name'] ?? $envKey;
+
+            if (!$isEditable) {
+                if ($this->isRequiredWithoutDefault($rules, $defaultValue)) {
+                    $errors[$envKey][] = __('This deployment variable is required but not user editable.');
+                }
+                continue;
+            }
+
+            $hasSubmittedValue = array_key_exists($envKey, $normalized);
+            if (!$hasSubmittedValue && !$this->isRequiredWithoutDefault($rules, $defaultValue)) {
+                continue;
+            }
+
+            $value = $hasSubmittedValue ? $normalized[$envKey] : $defaultValue;
+            $validator = Validator::make(
+                [$envKey => $value],
+                [$envKey => $rules]
+            );
+
+            $validator->setAttributeNames([
+                $envKey => $displayName,
+            ]);
+
+            if ($validator->fails()) {
+                $errors[$envKey] = $validator->errors()->get($envKey);
+            }
+        }
+
+        if (!empty($errors)) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        return $normalized;
+    }
+
+    private function isRequiredWithoutDefault(string $rules, mixed $defaultValue): bool
+    {
+        return str_contains($rules, 'required') && empty($defaultValue);
     }
 }

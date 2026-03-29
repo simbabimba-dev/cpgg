@@ -123,7 +123,8 @@ class TicketsController extends Controller
     {
         $this->checkAnyPermission([self::READ_PERMISSION, self::WRITE_PERMISSION]);
 
-        $query = Ticket::leftJoin('ticket_categories', 'tickets.ticketcategory_id', '=', 'ticket_categories.id')
+        $query = Ticket::with('user')
+            ->leftJoin('ticket_categories', 'tickets.ticketcategory_id', '=', 'ticket_categories.id')
             ->select(['tickets.*', 'ticket_categories.name as category_name']);
 
         return datatables($query)
@@ -134,7 +135,11 @@ class TicketsController extends Controller
                 return '<a class="text-info"  href="'.route('admin.ticket.show', ['ticket_id' => $tickets->ticket_id]).'">'.'#'.$tickets->ticket_id.' - '.htmlspecialchars($tickets->title).'</a>';
             })
             ->editColumn('user_id', function (Ticket $tickets) {
-                return '<a href="'.route('admin.users.show', $tickets->user->id).'">'.$tickets->user->name.'</a>';
+                if (!$tickets->user) {
+                    return __('Unknown user');
+                }
+
+                return '<a href="'.route('admin.users.show', $tickets->user->id).'">'.e($tickets->user->name).'</a>';
             })
             ->addColumn('actions', function (Ticket $tickets) {
                 $statusButtonColor = ($tickets->status == "Closed") ? 'btn-success' : 'btn-warning';
@@ -172,7 +177,7 @@ class TicketsController extends Controller
                         break;
                 }
 
-                return '<span class="badge '.$badgeColor.'">'.$tickets->status.'</span>';
+                return '<span class="badge '.$badgeColor.'">'.e($tickets->status).'</span>';
             })
             ->editColumn('priority', function (Ticket $tickets) {
                 return __($tickets->priority);
@@ -199,10 +204,17 @@ class TicketsController extends Controller
     {
         $this->checkPermission(self::BLACKLIST_WRITE_PERMISSION);
 
-        try {
-            $user = User::where('id', $request->user_id)->firstOrFail();
+        $validated = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+            'reason' => 'required|string|max:500',
+        ]);
 
-            if (auth()->user()->roles()->first()->power < $user->roles()->first()->power) {
+        try {
+            $user = User::where('id', $validated['user_id'])->firstOrFail();
+
+            $currentUserPower = (int) (auth()->user()->roles()->max('power') ?? 0);
+            $targetUserPower = (int) ($user->roles()->max('power') ?? 0);
+            if ($currentUserPower < $targetUserPower) {
                 return redirect()->back()->with('warning', __('You cannot blacklist a user with higher power than you.'));
             }
 
@@ -212,7 +224,7 @@ class TicketsController extends Controller
             return redirect()->back()->with('warning', __('User not found on the server. Check the admin database or try again later.'));
         }
         if ($check) {
-            $check->reason = $request->reason;
+            $check->reason = $validated['reason'];
             $check->status = 'True';
             $check->save();
 
@@ -221,7 +233,7 @@ class TicketsController extends Controller
         TicketBlacklist::create([
             'user_id' => $user->id,
             'status' => 'True',
-            'reason' => $request->reason,
+            'reason' => $validated['reason'],
         ]);
 
         return redirect()->back()->with('success', __('Successfully add User to blacklist, User name: '.$user->name));
@@ -266,7 +278,7 @@ class TicketsController extends Controller
 
         return datatables($query)
             ->editColumn('user', function (TicketBlacklist $blacklist) {
-                return '<a href="'.route('admin.users.show', $blacklist->user->id).'">'.$blacklist->user->name.'</a>';
+                return '<a href="'.route('admin.users.show', $blacklist->user->id).'">'.e($blacklist->user->name).'</a>';
             })
             ->editColumn('status', function (TicketBlacklist $blacklist) {
                 switch ($blacklist->status) {
@@ -283,7 +295,7 @@ class TicketsController extends Controller
                 return '<span class="badge '.$badgeColor.'">'.$text.'</span>';
             })
             ->editColumn('reason', function (TicketBlacklist $blacklist) {
-                return $blacklist->reason;
+                return e($blacklist->reason);
             })
             ->addColumn('actions', function (TicketBlacklist $blacklist) {
                 return '
@@ -302,7 +314,7 @@ class TicketsController extends Controller
             ->editColumn('created_at', function (TicketBlacklist $blacklist) {
                 return $blacklist->created_at ? $blacklist->created_at->diffForHumans() : '';
             })
-            ->rawColumns(['user', 'status', 'reason', 'created_at', 'actions'])
+            ->rawColumns(['user', 'status', 'created_at', 'actions'])
             ->make(true);
     }
 }

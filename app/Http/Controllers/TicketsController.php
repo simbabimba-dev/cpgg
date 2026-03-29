@@ -126,7 +126,9 @@ class TicketsController extends Controller
         //check in blacklist
         $check = TicketBlacklist::where('user_id', Auth::user()->id)->first();
         if ($check && $check->status == 'True') {
-            return redirect()->route('ticket.index')->with('error', __("You can't reply a ticket because you're on the blacklist for a reason: '" . $check->reason . "', please contact the administrator"));
+            return redirect()->route('ticket.index')->with('error', __("You can't reply a ticket because you're on the blacklist for a reason: ':reason', please contact the administrator", [
+                'reason' => $this->safeBlacklistReason($check->reason),
+            ]));
         }
         $this->validate($request, ['ticketcomment' => 'required']);
         try {
@@ -161,7 +163,9 @@ class TicketsController extends Controller
         //check in blacklist
         $check = TicketBlacklist::where('user_id', Auth::user()->id)->first();
         if ($check && $check->status == 'True') {
-            return redirect()->route('ticket.index')->with('error', __("You can't make a ticket because you're on the blacklist for a reason: '" . $check->reason . "', please contact the administrator"));
+            return redirect()->route('ticket.index')->with('error', __("You can't make a ticket because you're on the blacklist for a reason: ':reason', please contact the administrator", [
+                'reason' => $this->safeBlacklistReason($check->reason),
+            ]));
         }
         $ticketcategories = TicketCategory::all();
         $servers = Auth::user()->servers;
@@ -192,11 +196,13 @@ class TicketsController extends Controller
 
     public function dataTable()
     {
-        $query = Ticket::where('user_id', Auth::user()->id)->get();
+        $query = Ticket::query()
+            ->where('user_id', Auth::id())
+            ->with('ticketcategory');
 
         return datatables($query)
             ->addColumn('category', function (Ticket $tickets) {
-                return $tickets->ticketcategory->name;
+                return e(optional($tickets->ticketcategory)->name ?? __('Unknown'));
             })
             ->editColumn('title', function (Ticket $tickets) {
                 return '<a class="text-info"  href="' . route('ticket.show', ['ticket_id' => $tickets->ticket_id]) . '">' . '#' . $tickets->ticket_id . ' - ' . htmlspecialchars($tickets->title) . '</a>';
@@ -218,7 +224,7 @@ class TicketsController extends Controller
                         break;
                 }
 
-                return '<span class="badge ' . $badgeColor . '">' . $tickets->status . '</span>';
+                return '<span class="badge ' . $badgeColor . '">' . e($tickets->status) . '</span>';
             })
             ->editColumn('priority', function (Ticket $tickets) {
                 return __($tickets->priority);
@@ -245,7 +251,15 @@ class TicketsController extends Controller
                             </form>
                 ';
             })
-            ->rawColumns(['category', 'title', 'status', 'updated_at', "actions"])
+            ->rawColumns(['title', 'status', 'updated_at', 'actions'])
             ->make(true);
+    }
+
+    private function safeBlacklistReason(?string $reason): string
+    {
+        $normalized = strip_tags((string) $reason);
+        $normalized = trim(preg_replace('/\s+/', ' ', $normalized) ?? '');
+
+        return Str::limit($normalized, 200);
     }
 }

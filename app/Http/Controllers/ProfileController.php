@@ -13,6 +13,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class ProfileController extends Controller
@@ -27,6 +29,7 @@ class ProfileController extends Controller
     /** Display a listing of the resource. */
     public function index(UserSettings $user_settings, DiscordSettings $discord_settings, ReferralSettings $referral_settings)
     {
+        $discordOauthConfigured = !empty($discord_settings->client_id) && !empty($discord_settings->client_secret);
 
         return view('profile.index')->with([
             'user' => Auth::user(),
@@ -35,7 +38,7 @@ class ProfileController extends Controller
             'force_email_verification' => $user_settings->force_email_verification,
             'force_discord_verification' => $user_settings->force_discord_verification,
             'discord_client_id' => $discord_settings->client_id,
-            'discord_client_secret' => $discord_settings->client_secret,
+            'discord_oauth_configured' => $discordOauthConfigured,
             'referral_enabled' => $referral_settings->enabled
         ]);
     }
@@ -59,7 +62,7 @@ class ProfileController extends Controller
     {
         //prevent other users from editing a user
         if ($id != Auth::user()->id) {
-            dd(401);
+            abort(403);
         }
         $user = User::findOrFail($id);
 
@@ -91,9 +94,16 @@ class ProfileController extends Controller
 
             ]);
             if ($response->failed()) {
+                $errorId = (string) Str::uuid();
+                Log::error('Failed to sync password update to Pterodactyl', [
+                    'error_id' => $errorId,
+                    'user_id' => $user->id,
+                    'status' => $response->status(),
+                    'response' => $response->json(),
+                ]);
+
                 throw ValidationException::withMessages([
-                    'pterodactyl_error_message' => $response->toException()->getMessage(),
-                    'pterodactyl_error_status' => $response->toException()->getCode(),
+                    'pterodactyl_error_message' => __('Unable to sync your profile changes right now. Reference: :id', ['id' => $errorId]),
                 ]);
             }
             //update password
@@ -134,9 +144,16 @@ class ProfileController extends Controller
         ]);
 
         if ($response->failed()) {
+            $errorId = (string) Str::uuid();
+            Log::error('Failed to sync profile update to Pterodactyl', [
+                'error_id' => $errorId,
+                'user_id' => $user->id,
+                'status' => $response->status(),
+                'response' => $response->json(),
+            ]);
+
             throw ValidationException::withMessages([
-                'pterodactyl_error_message' => $response->toException()->getMessage(),
-                'pterodactyl_error_status' => $response->toException()->getCode(),
+                'pterodactyl_error_message' => __('Unable to sync your profile changes right now. Reference: :id', ['id' => $errorId]),
             ]);
         }
 

@@ -12,11 +12,14 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class UsefulLinkController extends Controller
 {
     const READ_PERMISSION = "admin.useful_links.read";
     const WRITE_PERMISSION = "admin.useful_links.write";
+    private const ICON_CLASS_REGEX = '/^(fa[srldb]?|fab)(\s+fa-[a-z0-9-]+){1,6}$/i';
     /**
      * Display a listing of the resource.
      *
@@ -52,20 +55,24 @@ class UsefulLinkController extends Controller
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
-        $request->validate([
-            'icon' => 'required|string',
+        $positions = array_map(static fn (UsefulLinkLocation $location) => $location->value, UsefulLinkLocation::cases());
+
+        $validated = $request->validate([
+            'icon' => ['required', 'string', 'max:120', 'regex:' . self::ICON_CLASS_REGEX],
             'title' => 'required|string|max:60',
             'link' => 'required|url|string|max:191',
             'description' => 'required|string|max:2000',
+            'position' => ['required', 'array', 'min:1'],
+            'position.*' => ['required', Rule::in($positions)],
         ]);
 
 
         UsefulLink::create([
-            'icon' => $request->icon,
-            'title' => $request->title,
-            'link' => $request->link,
-            'description' => $request->description,
-            'position' => implode(",",$request->position),
+            'icon' => $this->normalizeIconClass($validated['icon']),
+            'title' => $validated['title'],
+            'link' => $validated['link'],
+            'description' => $validated['description'],
+            'position' => implode(",", $validated['position']),
         ]);
 
         return redirect()->route('admin.usefullinks.index')->with('success', __('link has been created!'));
@@ -110,19 +117,23 @@ class UsefulLinkController extends Controller
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
-        $request->validate([
-            'icon' => 'required|string',
+        $positions = array_map(static fn (UsefulLinkLocation $location) => $location->value, UsefulLinkLocation::cases());
+
+        $validated = $request->validate([
+            'icon' => ['required', 'string', 'max:120', 'regex:' . self::ICON_CLASS_REGEX],
             'title' => 'required|string|max:60',
             'link' => 'required|url|string|max:191',
             'description' => 'required|string|max:2000',
+            'position' => ['required', 'array', 'min:1'],
+            'position.*' => ['required', Rule::in($positions)],
         ]);
 
         $usefullink->update([
-            'icon' => $request->icon,
-            'title' => $request->title,
-            'link' => $request->link,
-            'description' => $request->description,
-            'position' => implode(",",$request->position),
+            'icon' => $this->normalizeIconClass($validated['icon']),
+            'title' => $validated['title'],
+            'link' => $validated['link'],
+            'description' => $validated['description'],
+            'position' => implode(",", $validated['position']),
         ]);
 
         return redirect()->route('admin.usefullinks.index')->with('success', __('link has been updated!'));
@@ -164,9 +175,28 @@ class UsefulLinkController extends Controller
                 return $link->created_at ? $link->created_at->diffForHumans() : '';
             })
             ->editColumn('icon', function (UsefulLink $link) {
-                return "<i class='{$link->icon}'></i>";
+                $iconClass = $this->normalizeIconClass($link->icon);
+
+                return '<i class="' . e($iconClass) . '"></i>';
             })
             ->rawColumns(['actions', 'icon'])
             ->make();
+    }
+
+    private function normalizeIconClass(string $icon): string
+    {
+        $normalized = preg_replace('/\s+/', ' ', trim($icon)) ?? '';
+        if ($normalized === '' || !preg_match(self::ICON_CLASS_REGEX, $normalized)) {
+            return 'fas fa-link';
+        }
+
+        $parts = explode(' ', Str::lower($normalized));
+        $parts = array_values(array_unique(array_filter($parts, static fn (string $part) => preg_match('/^fa[srldb]?$|^fab$|^fa-[a-z0-9-]+$/', $part))));
+
+        if (empty($parts)) {
+            return 'fas fa-link';
+        }
+
+        return implode(' ', $parts);
     }
 }

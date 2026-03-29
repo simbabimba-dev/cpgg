@@ -25,6 +25,8 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Spatie\QueryBuilder\QueryBuilder;
@@ -110,9 +112,16 @@ class UserController extends Controller
             $response = $this->pterodactyl->application->patch('/application/users/' . $user->pterodactyl_id, $payload);
 
             if ($response->failed()) {
+                $errorId = (string) Str::uuid();
+                Log::error('Failed to sync API user update to Pterodactyl', [
+                    'error_id' => $errorId,
+                    'user_id' => $user->id,
+                    'status' => $response->status(),
+                    'response' => $response->json(),
+                ]);
+
                 throw ValidationException::withMessages([
-                    'pterodactyl_error_message' => $response->toException()->getMessage(),
-                    'pterodactyl_error_status' => $response->toException()->getCode(),
+                    'message' => __('Unable to update user due to an upstream error. Reference: :id', ['id' => $errorId]),
                 ]);
             }
 
@@ -132,11 +141,15 @@ class UserController extends Controller
 
             return UserResource::make($user);
         } catch (Exception $e) {
-            report($e);
+            $errorId = (string) Str::uuid();
+            Log::error('API user update failed', [
+                'error_id' => $errorId,
+                'user_id' => $user->id,
+                'exception' => $e,
+            ]);
 
             throw ValidationException::withMessages([
-                'pterodactyl_error_message' => $e->getMessage(),
-                'pterodactyl_error_status' => $e->getCode(),
+                'message' => __('Unable to update user right now. Reference: :id', ['id' => $errorId]),
             ]);
         }
     }
@@ -298,9 +311,16 @@ class UserController extends Controller
             ]);
 
             if ($response->failed()) {
+                $errorId = (string) Str::uuid();
+                Log::error('Failed to sync API user create to Pterodactyl', [
+                    'error_id' => $errorId,
+                    'status' => $response->status(),
+                    'response' => $response->json(),
+                    'email' => $data['email'] ?? null,
+                ]);
+
                 throw ValidationException::withMessages([
-                    'pterodactyl_error_message' => $response->toException()->getMessage(),
-                    'pterodactyl_error_status' => $response->toException()->getCode(),
+                    'message' => __('Unable to create user due to an upstream error. Reference: :id', ['id' => $errorId]),
                 ]);
             }
 
@@ -315,10 +335,15 @@ class UserController extends Controller
             return UserResource::make($user);
         } catch (Exception $e) {
             DB::rollBack();
+            $errorId = (string) Str::uuid();
+            Log::error('API user create failed', [
+                'error_id' => $errorId,
+                'exception' => $e,
+                'email' => $data['email'] ?? null,
+            ]);
 
             throw ValidationException::withMessages([
-                'pterodactyl_error_message' => $e->getMessage(),
-                'pterodactyl_error_status' => $e->getCode(),
+                'message' => __('Unable to create user right now. Reference: :id', ['id' => $errorId]),
             ]);
         };
     }

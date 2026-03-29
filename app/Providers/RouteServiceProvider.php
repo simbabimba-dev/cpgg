@@ -52,5 +52,26 @@ class RouteServiceProvider extends ServiceProvider
         RateLimiter::for('web', function (Request $request) {
             return Limit::perMinute(40)->by($request->user()?->id ?: $request->ip());
         });
+
+        RateLimiter::for('security-payment', function (Request $request) {
+            return Limit::perMinute(8)->by('payment:' . ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('security-server-create', function (Request $request) {
+            return Limit::perMinute(6)->by('server-create:' . ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('security-mass-notify', function (Request $request) {
+            return Limit::perMinute(3)->by('mass-notify:' . ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('security-api-mass-notify', function (Request $request) {
+            $token = $request->attributes->get('application_api_token');
+            $tokenId = is_object($token) && isset($token->token)
+                ? substr(hash('sha256', (string) $token->token), 0, 16)
+                : $request->ip();
+
+            return Limit::perMinute(10)->by('api-notify:' . $tokenId);
+        });
     }
 }

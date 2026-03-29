@@ -35,11 +35,13 @@ class TicketCategoryController extends Controller
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:191',
         ]);
 
-        TicketCategory::create($request->all());
+        TicketCategory::create([
+            'name' => $validated['name'],
+        ]);
 
 
         return redirect(route("admin.ticket.category.index"))->with("success",__("Category created"));

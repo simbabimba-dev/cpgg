@@ -10,7 +10,6 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Activity;
-use Illuminate\Pagination\LengthAwarePaginator;
 
 class ActivityLogController extends Controller
 {
@@ -24,49 +23,70 @@ class ActivityLogController extends Controller
     {
         $this->checkPermission(self::VIEW_PERMISSION);
 
-
-        $cronLogs = Storage::disk('logs')->exists('cron.log') ? Storage::disk('logs')->get('cron.log') : null;
-
-        if ($request->input('search')) {
-            $searchTerm = $request->input('search');
-
-            // Pre-fetch logs and decode JSON properties
-            $logs = Activity::all()->filter(function ($log) use ($searchTerm) {
-                $properties = json_decode($log->properties, true);
-
-                // Check if search term exists in attributes or old values
-                $attributesMatch = isset($properties['attributes']) &&
-                    collect($properties['attributes'])->contains(fn($value) => str_contains(strtolower($value), strtolower($searchTerm)));
-
-                $oldMatch = isset($properties['old']) &&
-                    collect($properties['old'])->contains(fn($value) => str_contains(strtolower($value), strtolower($searchTerm)));
-
-                return str_contains(strtolower($log->description), strtolower($searchTerm)) ||
-                    str_contains(strtolower(optional($log->causer)->name), strtolower($searchTerm)) ||
-                    $attributesMatch || $oldMatch;
-            });
-
-            // Paginate manually
-            $perPage = 20;
-            $currentPage = LengthAwarePaginator::resolveCurrentPage();
-            $currentItems = $logs->slice(($currentPage - 1) * $perPage, $perPage);
-            $query = new LengthAwarePaginator(
-                $currentItems,
-                $logs->count(),
-                $perPage,
-                $currentPage,
-                ['path' => LengthAwarePaginator::resolveCurrentPath()]
-            );
-        } else {
-            $query = Activity::orderBy('created_at', 'desc')->paginate(20);
+        $cronLogs = null;
+        if (Storage::disk('logs')->exists('cron.log')) {
+            $trimmed = $this->readCronLogTail('cron.log', 100000);
+            $lines = preg_split('/\r\n|\r|\n/', (string) $trimmed) ?: [];
+            $cronLogs = implode(PHP_EOL, array_slice($lines, -500));
         }
 
+        $query = Activity::query()->with('causer')->orderBy('created_at', 'desc');
+
+        if ($request->filled('search')) {
+            $search = mb_strtolower((string) $request->input('search'));
+            $searchLike = '%' . $search . '%';
+
+            $query->where(function ($builder) use ($searchLike) {
+                $builder->whereRaw('LOWER(description) LIKE ?', [$searchLike])
+                    ->orWhereRaw('LOWER(properties) LIKE ?', [$searchLike])
+                    ->orWhereHas('causer', function ($causerQuery) use ($searchLike) {
+                        $causerQuery->whereRaw('LOWER(name) LIKE ?', [$searchLike]);
+                    });
+            });
+        }
+
+        $logs = $query->paginate(20)->withQueryString();
+
         return view('admin.activitylogs.index')->with([
-            'logs' => $query,
+            'logs' => $logs,
             'cronlogs' => $cronLogs,
         ]);
 
 
+    }
+
+    private function readCronLogTail(string $path, int $maxBytes): string
+    {
+        $disk = Storage::disk('logs');
+        $stream = $disk->readStream($path);
+
+        if (!is_resource($stream)) {
+            return (string) $disk->get($path);
+        }
+
+        try {
+            $metadata = stream_get_meta_data($stream);
+            $isSeekable = (bool) ($metadata['seekable'] ?? false);
+            $size = $disk->size($path);
+
+            if ($isSeekable && is_int($size) && $size > $maxBytes) {
+                fseek($stream, max(0, $size - $maxBytes));
+            }
+
+            $contents = stream_get_contents($stream);
+
+            if (!is_string($contents)) {
+                return '';
+            }
+
+            if (!$isSeekable && strlen($contents) > $maxBytes) {
+                return substr($contents, -$maxBytes);
+            }
+
+            return $contents;
+        } finally {
+            fclose($stream);
+        }
     }
 
     /**

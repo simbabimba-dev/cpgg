@@ -8,6 +8,7 @@ use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class Controller extends BaseController
 {
@@ -26,6 +27,13 @@ class Controller extends BaseController
 
         // If user is not authenticated or lacks the permission, deny access
         if (!$user || !$user->can($permission)) {
+            Log::warning('Authorization denied by checkPermission', [
+                'user_id' => $user?->id,
+                'permission' => $permission,
+                'route' => request()->route()?->getName(),
+                'method' => request()->method(),
+                'ip' => request()->ip(),
+            ]);
             abort(403, __('User does not have the right permissions.'));
         }
     }
@@ -37,6 +45,13 @@ class Controller extends BaseController
 
         // If user is not authenticated or lacks any of the permissions, deny access
         if (!$user || !$user->canAny($permission)) {
+            Log::warning('Authorization denied by checkAnyPermission', [
+                'user_id' => $user?->id,
+                'permissions' => is_array($permission) ? $permission : iterator_to_array($permission),
+                'route' => request()->route()?->getName(),
+                'method' => request()->method(),
+                'ip' => request()->ip(),
+            ]);
             abort(403, __('User does not have the right permissions.'));
         }
     }

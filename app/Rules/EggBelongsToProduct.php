@@ -33,13 +33,20 @@ class EggBelongsToProduct implements DataAwareRule, ValidationRule
      */
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
+        $productId = $this->data['product_id'] ?? $this->data['product'] ?? null;
+        if (!$productId) {
+            $fail('The selected product is invalid.');
+
+            return;
+        }
+
         $exists = DB::table('egg_product')
-            ->where('product_id', $this->data['product_id'])
+            ->where('product_id', $productId)
             ->where('egg_id', $value)
             ->exists();
 
         if (!$exists) {
-            $fail("The egg with ID {$value} does not belong to the product with ID {$this->data['product_id']}.");
+            $fail('The selected specification does not belong to the selected product.');
         }
     }
 

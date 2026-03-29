@@ -207,7 +207,7 @@ class VoucherController extends Controller
 
         return datatables($users)
             ->editColumn('name', function (User $user) {
-                return '<a class="text-info" target="_blank" href="'.route('admin.users.show', $user->id).'">'.$user->name.'</a>';
+                return '<a class="text-info" target="_blank" href="'.route('admin.users.show', $user->id).'">'.e($user->name).'</a>';
             })
             ->addColumn('credits', function (User $user, CurrencyHelper $currencyHelper) {
                 return '<i class="mr-2 fas fa-coins"></i> '. $currencyHelper->formatForDisplay($user->credits);
@@ -265,7 +265,7 @@ class VoucherController extends Controller
                 return $voucher->expires_at ? $voucher->expires_at->diffForHumans() : __("Never");
             })
             ->editColumn('code', function (Voucher $voucher) {
-                return "<code>{$voucher->code}</code>";
+                return '<code>' . e($voucher->code) . '</code>';
             })
             ->orderColumn('status', 'derived_status $1')
             ->rawColumns(['actions', 'code', 'status'])

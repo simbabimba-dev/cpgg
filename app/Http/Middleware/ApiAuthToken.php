@@ -26,6 +26,7 @@ class ApiAuthToken
             return response()->json(['message' => 'Invalid Authorization token'], 401);
         }
 
+        $request->attributes->set('application_api_token', $token);
         $token->updateLastUsed();
 
         return $next($request);

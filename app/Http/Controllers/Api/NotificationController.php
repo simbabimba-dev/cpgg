@@ -12,7 +12,8 @@ use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Support\HtmlString;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
@@ -65,6 +66,8 @@ class NotificationController extends Controller
     {
         try {
             $data = $request->validated();
+            $title = $this->sanitizeNotificationText($data['title']);
+            $content = $this->sanitizeNotificationText($data['content']);
             
             $via = match($data['via']) {
                 'mail' => ['mail'],
@@ -73,14 +76,14 @@ class NotificationController extends Controller
             };
             
             $database = in_array('database', $via) ? [
-                'title' => $data['title'],
-                'content' => $data['content'],
+                'title' => $title,
+                'content' => $content,
             ] : null;
             
             $mail = in_array('mail', $via) ? 
                 (new MailMessage)
-                    ->subject($data['title'])
-                    ->line(new HtmlString($data['content']))
+                    ->subject($title)
+                    ->line($content)
                 : null;
             
             $users = $this->getTargetUsers($data);
@@ -95,9 +98,16 @@ class NotificationController extends Controller
                 ]
             ]);
         } catch (Exception $e) {
+            $errorId = (string) Str::uuid();
+            Log::error('API notification sendToUsers failed', [
+                'error_id' => $errorId,
+                'exception' => $e,
+            ]);
+
             return response()->json([
                 'error' => 'Failed to send notification.',
-                'message' => $e->getMessage()
+                'message' => 'An unexpected error occurred.',
+                'error_id' => $errorId,
             ], 500);
         }
     }
@@ -112,6 +122,8 @@ class NotificationController extends Controller
     {
         try {
             $data = $request->validated();
+            $title = $this->sanitizeNotificationText($data['title']);
+            $content = $this->sanitizeNotificationText($data['content']);
             
             $via = match($data['via']) {
                 'mail' => ['mail'],
@@ -120,14 +132,14 @@ class NotificationController extends Controller
             };
             
             $database = in_array('database', $via) ? [
-                'title' => $data['title'],
-                'content' => $data['content'],
+                'title' => $title,
+                'content' => $content,
             ] : null;
             
             $mail = in_array('mail', $via) ? 
                 (new MailMessage)
-                    ->subject($data['title'])
-                    ->line(new HtmlString($data['content']))
+                    ->subject($title)
+                    ->line($content)
                 : null;
             
             $users = User::all();
@@ -142,9 +154,16 @@ class NotificationController extends Controller
                 ]
             ]);
         } catch (Exception $e) {
+            $errorId = (string) Str::uuid();
+            Log::error('API notification sendToAll failed', [
+                'error_id' => $errorId,
+                'exception' => $e,
+            ]);
+
             return response()->json([
                 'error' => 'Failed to send notification.',
-                'message' => $e->getMessage()
+                'message' => 'An unexpected error occurred.',
+                'error_id' => $errorId,
             ], 500);
         }
     }
@@ -206,5 +225,11 @@ class NotificationController extends Controller
         }
 
         return $users;
+    }
+
+    private function sanitizeNotificationText(string $value): string
+    {
+        $normalized = strip_tags($value);
+        return trim(preg_replace('/\s+/', ' ', $normalized) ?? '');
     }
 }

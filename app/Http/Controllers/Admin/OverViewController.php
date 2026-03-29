@@ -149,10 +149,9 @@ class OverViewController extends Controller
         $syncLastUpdate = $lastEgg ? $lastEgg->updated_at->isoFormat('LLL') : __('unknown');
 
         //Get node information and prepare collection
-        $pteroNodeIds = [];
-        foreach ($this->pterodactyl->getNodes() as $pteroNode) {
-            array_push($pteroNodeIds, $pteroNode['attributes']['id']);
-        }
+        $pteroNodes = collect($this->pterodactyl->getNodes())
+            ->mapWithKeys(fn (array $node) => [(int) $node['attributes']['id'] => $node['attributes']]);
+        $pteroNodeIds = $pteroNodes->keys()->all();
         $nodes = collect();
         foreach ($DBnodes = Node::query()->get() as $DBnode) { //gets all node information and prepares the structure
             $nodeId = $DBnode['id'];
@@ -161,7 +160,10 @@ class OverViewController extends Controller
             } //Check if node exists on pterodactyl too, if not, skip
             $nodes->put($nodeId, collect());
             $nodes[$nodeId]->name = $DBnode['name'];
-            $pteroNode = $this->pterodactyl->getNode($nodeId);
+            $pteroNode = $pteroNodes->get((int) $nodeId);
+            if (!$pteroNode) {
+                continue;
+            }
             $nodes[$nodeId]->usagePercent = round(max($pteroNode['allocated_resources']['memory'] / ($pteroNode['memory'] * ($pteroNode['memory_overallocate'] + 100) / 100), $pteroNode['allocated_resources']['disk'] / ($pteroNode['disk'] * ($pteroNode['disk_overallocate'] + 100) / 100)) * 100, 2);
             $counters['totalUsagePercent'] += $nodes[$nodeId]->usagePercent;
 
@@ -172,33 +174,43 @@ class OverViewController extends Controller
         }
         $counters['totalUsagePercent'] = ($DBnodes->count()) ? round($counters['totalUsagePercent'] / $DBnodes->count(), 2) : 0;
 
-        foreach ($this->pterodactyl->getServers() as $server) { //gets all servers from Pterodactyl and calculates total of credit usage for each node separately + total
-            $nodeId = $server['attributes']['node'];
+        $pteroServers = $this->pterodactyl->getServers();
+        $pteroServerIds = collect($pteroServers)->pluck('attributes.id')->all();
+        $cpServersByPteroId = Server::query()
+            ->with('product')
+            ->whereIn('pterodactyl_id', $pteroServerIds)
+            ->get()
+            ->keyBy('pterodactyl_id');
 
-            if ($CPServer = Server::query()->where('pterodactyl_id', $server['attributes']['id'])->first()) {
-                $product = Product::query()->where('id', $CPServer->product_id)->first();
-                $price = $product->getMonthlyPrice();
-                if (! $CPServer->suspended) {
-                    $counters['earnings']->active += $price;
-                    $counters['servers']->active++;
-                    $nodes[$nodeId]->activeEarnings += $price;
-                    $nodes[$nodeId]->activeServers++;
-                }
-                $counters['earnings']->total += $price;
-                $counters['servers']->total++;
-                $nodes[$nodeId]->totalEarnings += $price;
-                $nodes[$nodeId]->totalServers++;
+        foreach ($pteroServers as $server) { //gets all servers from Pterodactyl and calculates totals
+            $attributes = $server['attributes'];
+            $nodeId = (int) $attributes['node'];
+            $cpServer = $cpServersByPteroId->get($attributes['id']);
+            if (!$cpServer || !$cpServer->product || !$nodes->has($nodeId)) {
+                continue;
             }
+
+            $price = $cpServer->product->getMonthlyPrice();
+            if (! $cpServer->suspended) {
+                $counters['earnings']->active += $price;
+                $counters['servers']->active++;
+                $nodes[$nodeId]->activeEarnings += $price;
+                $nodes[$nodeId]->activeServers++;
+            }
+            $counters['earnings']->total += $price;
+            $counters['servers']->total++;
+            $nodes[$nodeId]->totalEarnings += $price;
+            $nodes[$nodeId]->totalServers++;
         }
 
         //Get latest tickets
         $tickets = collect();
-        foreach (Ticket::query()->latest()->take(5)->get() as $ticket) {
+        foreach (Ticket::query()->with('user:id,name')->latest()->take(5)->get() as $ticket) {
             $tickets->put($ticket->ticket_id, collect());
             $tickets[$ticket->ticket_id]->title = $ticket->title;
-            $user = User::query()->where('id', $ticket->user_id)->first();
-            $tickets[$ticket->ticket_id]->user_id = $user->id;
-            $tickets[$ticket->ticket_id]->user = $user->name;
+            $user = $ticket->user;
+            $tickets[$ticket->ticket_id]->user_id = $user?->id;
+            $tickets[$ticket->ticket_id]->user = $user?->name ?? __('Unknown user');
             $tickets[$ticket->ticket_id]->status = $ticket->status;
             $tickets[$ticket->ticket_id]->last_updated = $ticket->updated_at->diffForHumans();
             switch ($ticket->status) {

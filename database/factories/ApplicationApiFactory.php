@@ -15,6 +15,7 @@ class ApplicationApiFactory extends Factory
     {
         return [
             'memo' => $this->faker->word(),
+            'scopes' => null,
         ];
     }
 }

@@ -1,6 +1,6 @@
 @component('mail::message')
 
-{{ new \Illuminate\Support\HtmlString($content) }}
+{{ $content }}
 
 {{ config('app.name') }}
 @endcomponent

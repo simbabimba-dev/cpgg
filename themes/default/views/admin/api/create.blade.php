@@ -1,7 +1,6 @@
 @extends('layouts.main')
 
 @section('content')
-    <!-- CONTENT HEADER -->
     <section class="content-header">
         <div class="container-fluid">
             <div class="row mb-2">
@@ -21,47 +20,22 @@
             </div>
         </div>
     </section>
-    <!-- END CONTENT HEADER -->
 
-    <!-- MAIN CONTENT -->
     <section class="content">
         <div class="container-fluid">
-
-            <div class="row">
-                <div class="col-lg-6">
-                    <div class="card">
-                        <div class="card-body">
-                            <form action="{{route('admin.api.store')}}" method="POST">
-                                @csrf
-
-                                <div class="form-group">
-                                    <label for="memo">{{__('Memo')}}</label>
-                                    <input value="{{old('memo')}}" id="memo" name="memo" type="text"
-                                           class="form-control @error('memo') is-invalid @enderror">
-                                    @error('memo')
-                                    <div class="invalid-feedback">
-                                        {{$message}}
-                                    </div>
-                                    @enderror
-                                </div>
-
-                                <div class="form-group text-right">
-                                    <button type="submit" class="btn btn-primary">
-                                        {{__('Submit')}}
-                                    </button>
-                                </div>
-
-                                <input type="hidden" name="_token" value="{{ csrf_token() }}">
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
+            @include('admin.api._form', [
+                'heroKicker' => __('New Credentials'),
+                'heroTitle' => __('Create an application token with intentional scope boundaries'),
+                'heroDescription' => __('Shape each credential around the integration that will use it, so you are not handing out broad access when a narrow token will do.'),
+                'formAction' => route('admin.api.store'),
+                'method' => null,
+                'panelTitle' => __('Credential details'),
+                'panelCaption' => __('Pick a description and access level set, then create the token.'),
+                'submitLabel' => __('Create Credentials'),
+                'memoValue' => old('memo'),
+                'scopesValue' => old('scopes'),
+                'availableScopes' => $availableScopes,
+            ])
         </div>
     </section>
-    <!-- END CONTENT -->
-
-
-
 @endsection
