@@ -41,7 +41,7 @@
                     @endif
 
                     @if (is_null(Auth::user()->discordUser) && $force_discord_verification)
-                        @if (!empty($discord_client_id) && !empty($discord_client_secret))
+                        @if (!empty($discord_client_id) && !empty($discord_oauth_configured))
                             <div class="p-2 m-2 alert alert-warning">
                                 <h5>
                                     <i
@@ -240,7 +240,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        @if (!empty($discord_client_id) && !empty($discord_client_secret))
+                                        @if (!empty($discord_client_id) && !empty($discord_oauth_configured))
                                             <div class="mb-3 col-12 col-sm-5 offset-sm-1">
                                                 @if (is_null(Auth::user()->discordUser))
                                                     <b>{{ __('Link your discord account!') }}</b>

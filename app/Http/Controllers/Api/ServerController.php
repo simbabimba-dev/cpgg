@@ -22,6 +22,8 @@ use App\Settings\PterodactylSettings;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Spatie\QueryBuilder\QueryBuilder;
 use Spatie\QueryBuilder\AllowedFilter;
 use Exception;
@@ -105,9 +107,7 @@ class ServerController extends Controller
 
             return ServerResource::make($server->fresh());
         } catch (Exception $e) {
-            return response()->json([
-                'message' => $e->getMessage()
-            ], 401);
+            return $this->serverErrorResponse($e, 'Failed to create server.');
         }
     }
 
@@ -142,12 +142,7 @@ class ServerController extends Controller
 
             return ServerResource::make($server->refresh());
         } catch (Exception $e) {
-            logger()->error('Failed to update server in Pterodactyl.', [
-                'error' => $e->getMessage(),
-                'server_id' => $server->id
-            ]);
-
-            return response()->json(['message' => $e->getMessage()], 500);
+            return $this->serverErrorResponse($e, 'Failed to update server.', ['server_id' => $server->id]);
         }
     }
 
@@ -172,7 +167,11 @@ class ServerController extends Controller
 
             return ServerResource::make($server->fresh());
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], $e->getCode() ?: 500);
+            return $this->serverErrorResponse($e, 'Failed to update server build.', [
+                'server_id' => $server->id,
+                'user_id' => $user->id,
+                'product_id' => $product->id,
+            ]);
         }
     }
 
@@ -202,7 +201,7 @@ class ServerController extends Controller
 
             $server->delete();
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 500);
+            return $this->serverErrorResponse($e, 'Failed to delete server.', ['server_id' => $server->id]);
         }
 
         return response()->noContent();
@@ -232,7 +231,7 @@ class ServerController extends Controller
 
             $server->suspend();
         } catch (Exception $exception) {
-            return response()->json(['message' => $exception->getMessage()], 500);
+            return $this->serverErrorResponse($exception, 'Failed to suspend server.', ['server_id' => $server->id]);
         }
 
         return ServerResource::make($server);
@@ -262,9 +261,23 @@ class ServerController extends Controller
 
             $server->unSuspend();
         } catch (Exception $exception) {
-            return response()->json(['message' => $exception->getMessage()], 500);
+            return $this->serverErrorResponse($exception, 'Failed to unsuspend server.', ['server_id' => $server->id]);
         }
 
         return ServerResource::make($server);
+    }
+
+    private function serverErrorResponse(Exception $exception, string $message, array $context = []): JsonResponse
+    {
+        $errorId = (string) Str::uuid();
+        Log::error('API server controller failure', array_merge($context, [
+            'error_id' => $errorId,
+            'exception' => $exception,
+        ]));
+
+        return response()->json([
+            'message' => $message,
+            'error_id' => $errorId,
+        ], 500);
     }
 }

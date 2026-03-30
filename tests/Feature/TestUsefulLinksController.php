@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\UsefulLink;
+use App\Models\Permission;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Str;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 /**
@@ -14,6 +16,12 @@ use Tests\TestCase;
 class TestUsefulLinksController extends TestCase
 {
     use DatabaseTransactions;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
 
     /**
      * @dataProvider accessibleRoutesDataProvider
@@ -28,10 +36,14 @@ class TestUsefulLinksController extends TestCase
             'id' => 1,
         ]);
 
-        $response = $this->actingAs(User::factory()->create([
-            'role' => 'admin',
+        $user = User::factory()->create([
             'pterodactyl_id' => '1',
-        ]))->{$method}($route);
+        ]);
+        Permission::findOrCreate('admin.useful_links.read', 'web');
+        Permission::findOrCreate('admin.useful_links.write', 'web');
+        $user->givePermissionTo(['admin.useful_links.read', 'admin.useful_links.write']);
+
+        $response = $this->actingAs($user)->{$method}($route);
 
         $response->assertStatus($expectedStatus);
     }
@@ -99,10 +111,15 @@ class TestUsefulLinksController extends TestCase
      */
     private function getTestUser(): User
     {
-        return User::factory()->create([
-            'role' => 'admin',
+        $user = User::factory()->create([
             'pterodactyl_id' => '1',
         ]);
+
+        Permission::findOrCreate('admin.useful_links.read', 'web');
+        Permission::findOrCreate('admin.useful_links.write', 'web');
+        $user->givePermissionTo(['admin.useful_links.read', 'admin.useful_links.write']);
+
+        return $user;
     }
 
     /**
@@ -117,6 +134,7 @@ class TestUsefulLinksController extends TestCase
                     'title' => 'Bitsec.Dev Dashboard',
                     'link' => 'https://manage.bitsec.dev.com',
                     'description' => Str::random(1500),
+                    'position' => ['footer'],
                 ],
                 'expectedCount' => 1,
                 'assertValidationErrors' => false,
@@ -127,6 +145,7 @@ class TestUsefulLinksController extends TestCase
                     'title' => Str::random(30),
                     'link' => 'https://somerandomsite.com',
                     'description' => Str::random(1500),
+                    'position' => ['navbar'],
                 ],
                 'expectedCount' => 1,
                 'assertValidationErrors' => false,
@@ -137,6 +156,7 @@ class TestUsefulLinksController extends TestCase
                     'title' => 'Some Random Title',
                     'link' => '1221',
                     'description' => '<p>Some Random HTML</p>',
+                    'position' => ['footer'],
                 ],
                 'expectedCount' => 0,
                 'assertValidationErrors' => true,
@@ -147,6 +167,7 @@ class TestUsefulLinksController extends TestCase
                     'title' => '',
                     'link' => 'https://somerandomsite.com',
                     'description' => '<p>Some Random HTML</p>',
+                    'position' => ['footer'],
                 ],
                 'expectedCount' => 0,
                 'assertValidationErrors' => true,
@@ -157,6 +178,7 @@ class TestUsefulLinksController extends TestCase
                     'title' => Str::random(200),
                     'link' => 'https://valid.com',
                     'description' => '<p>Some Random HTML</p>',
+                    'position' => ['footer'],
                 ],
                 'expectedCount' => 0,
                 'assertValidationErrors' => true,
@@ -167,6 +189,7 @@ class TestUsefulLinksController extends TestCase
                     'title' => 'Some Random Valid Title',
                     'link' => 'https://valid.com',
                     'description' => Str::random(2100),
+                    'position' => ['footer'],
                 ],
                 'expectedCount' => 0,
                 'assertValidationErrors' => true,
@@ -176,6 +199,7 @@ class TestUsefulLinksController extends TestCase
                     'title' => 'Some Random Valid Title',
                     'link' => 'https://valid.com',
                     'description' => Str::random(200),
+                    'position' => ['footer'],
                 ],
                 'expectedCount' => 0,
                 'assertValidationErrors' => true,

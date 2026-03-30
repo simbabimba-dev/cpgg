@@ -65,11 +65,18 @@ Route::middleware(['auth', 'checkSuspended'])->group(function () {
     Route::get('notifications/readAll', [NotificationController::class, 'readAll'])->name('notifications.readAll');
     Route::resource('notifications', NotificationController::class);
     Route::patch('/servers/cancel/{server}', [ServerController::class, 'cancel'])->name('servers.cancel');
-    Route::post('/servers/validateDeploymentVariables', [ServerController::class, 'validateDeploymentVariables'])->name('servers.validateDeploymentVariables');
+    Route::post('/servers/validateDeploymentVariables', [ServerController::class, 'validateDeploymentVariables'])
+        ->middleware('throttle:security-server-create')
+        ->middleware('permission:user.server.create')
+        ->name('servers.validateDeploymentVariables');
     Route::patch('/servers/{server}/billing_priority', [ServerController::class, 'updateBillingPriority'])->name('servers.updateBillingPriority');
     Route::delete('/servers/{server}', [ServerController::class, 'destroy'])->name('servers.destroy');
     // Route::patch('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
-    Route::resource('servers', ServerController::class);
+    Route::post('servers', [ServerController::class, 'store'])
+        ->middleware('permission:user.server.create')
+        ->middleware('throttle:security-server-create')
+        ->name('servers.store');
+    Route::resource('servers', ServerController::class)->except('store');
 
     try {
         $serverSettings = app(App\Settings\ServerSettings::class);
@@ -93,9 +100,17 @@ Route::middleware(['auth', 'checkSuspended'])->group(function () {
     Route::get('/products/products/{egg?}/{location?}', [FrontProductController::class, 'getProductsBasedOnLocation'])->name('products.products.location');
 
     //payments
-    Route::get('checkout/{shopProduct}', [PaymentController::class, 'checkOut'])->name('checkout');
-    Route::post('payment/pay', [PaymentController::class, 'pay'])->name('payment.pay');
-    Route::get('payment/FreePay/{shopProduct}', [PaymentController::class, 'FreePay'])->name('payment.FreePay');
+    Route::get('checkout/{shopProduct}', [PaymentController::class, 'checkOut'])
+        ->middleware('permission:user.shop.buy')
+        ->name('checkout');
+    Route::post('payment/pay', [PaymentController::class, 'pay'])
+        ->middleware('throttle:security-payment')
+        ->middleware('permission:user.shop.buy')
+        ->name('payment.pay');
+    Route::get('payment/FreePay/{shopProduct}', [PaymentController::class, 'FreePay'])
+        ->middleware('throttle:security-payment')
+        ->middleware('permission:user.shop.buy')
+        ->name('payment.FreePay');
     Route::get('payment/Cancel', [PaymentController::class, 'Cancel'])->name('payment.Cancel');
 
     Route::get('users/logbackin', [UserController::class, 'logBackIn'])->name('users.logbackin');
@@ -120,7 +135,7 @@ Route::middleware(['auth', 'checkSuspended'])->group(function () {
 
 
     //admin
-    Route::prefix('admin')->name('admin.')->group(function () {
+    Route::prefix('admin')->name('admin.')->middleware('admin.access')->group(function () {
         //Roles
         Route::get('roles/datatable', [RoleController::class, 'datatable'])->name('roles.datatable');
         Route::resource('roles', RoleController::class);
@@ -136,7 +151,9 @@ Route::middleware(['auth', 'checkSuspended'])->group(function () {
         Route::get('users/verifyEmail/{user}', [UserController::class, 'verifyEmail'])->name('users.verifyEmail');
         Route::get('users/datatable', [UserController::class, 'datatable'])->name('users.datatable');
         Route::get('users/notifications', [UserController::class, 'notifications'])->name('users.notifications.index');
-        Route::post('users/notifications', [UserController::class, 'notify'])->name('users.notifications.notify');
+        Route::post('users/notifications', [UserController::class, 'notify'])
+            ->middleware('throttle:security-mass-notify')
+            ->name('users.notifications.notify');
         Route::post('users/togglesuspend/{user}', [UserController::class, 'toggleSuspended'])->name('users.togglesuspend');
         Route::resource('users', UserController::class);
 
@@ -171,8 +188,12 @@ Route::middleware(['auth', 'checkSuspended'])->group(function () {
 
 
         //invoices
-        Route::get('invoices/download-invoices', [InvoiceController::class, 'downloadAllInvoices'])->name('invoices.downloadAllInvoices');
-        Route::get('invoices/download-single-invoice', [InvoiceController::class, 'downloadSingleInvoice'])->name('invoices.downloadSingleInvoice');
+        Route::get('invoices/download-invoices', [InvoiceController::class, 'downloadAllInvoices'])
+            ->middleware('permission:admin.payments.read')
+            ->name('invoices.downloadAllInvoices');
+        Route::get('invoices/download-single-invoice', [InvoiceController::class, 'downloadSingleInvoice'])
+            ->middleware('permission:admin.payments.read')
+            ->name('invoices.downloadSingleInvoice');
 
         //usefullinks
         Route::get('usefullinks/datatable', [UsefulLinkController::class, 'datatable'])->name('usefullinks.datatable');

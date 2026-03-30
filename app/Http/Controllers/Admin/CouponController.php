@@ -230,6 +230,13 @@ class CouponController extends Controller
 
     public function redeem(Request $request)
     {
+        $this->checkAnyPermission([self::WRITE_PERMISSION, self::READ_PERMISSION]);
+
+        $request->validate([
+            'couponCode' => 'required|string|min:1|max:191',
+            'productId' => 'required|string|exists:shop_products,id',
+        ]);
+
         return $this->validateCoupon($request->user(), $request->input('couponCode'), $request->input('productId'));
     }
 

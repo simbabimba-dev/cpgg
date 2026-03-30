@@ -28,6 +28,7 @@ use App\Settings\GeneralSettings;
 use App\Settings\LocaleSettings;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class PaymentController extends Controller
 {
@@ -58,25 +59,19 @@ class PaymentController extends Controller
     public function checkOut(ShopProduct $shopProduct, GeneralSettings $general_settings, CouponSettings $coupon_settings, CurrencyHelper $currencyHelper)
     {
         $this->checkPermission(self::BUY_PERMISSION);
+        if ($shopProduct->disabled) {
+            abort(403, __('This product is currently unavailable.'));
+        }
 
         $discount = PartnerDiscount::getDiscount();
         $price = $shopProduct->price - ($shopProduct->price * $discount / 100);
 
         $paymentGateways = [];
         if ($price > 0) {
-            $extensions = ExtensionHelper::getAllExtensionsByNamespace('PaymentGateways');
-
-            // build a paymentgateways array that contains the routes for the payment gateways and the image path for the payment gateway which lays in public/images/Extensions/PaymentGateways with the extensionname in lowercase
-            foreach ($extensions as $extension) {
-                $extensionName = basename($extension);
-
-                $extensionSettings = ExtensionHelper::getExtensionSettings($extensionName);
-                if ($extensionSettings->enabled == false) continue;
-
-
+            foreach ($this->enabledPaymentGatewayMeta() as $gateway) {
                 $payment = new \stdClass();
-                $payment->name = ExtensionHelper::getExtensionConfig($extensionName, 'name');
-                $payment->image = asset('images/Extensions/PaymentGateways/' . strtolower($extensionName) . '_logo.png');
+                $payment->name = $gateway['name'];
+                $payment->image = asset('images/Extensions/PaymentGateways/' . strtolower($gateway['extension']) . '_logo.png');
                 $paymentGateways[] = $payment;
             }
         }
@@ -103,6 +98,12 @@ class PaymentController extends Controller
      */
     public function handleFreeProduct(ShopProduct $shopProduct)
     {
+        $this->checkPermission(self::BUY_PERMISSION);
+
+        if ($shopProduct->disabled) {
+            abort(403, __('This product is currently unavailable.'));
+        }
+
         /** @var User $user */
         $user = Auth::user();
 
@@ -131,13 +132,30 @@ class PaymentController extends Controller
         return redirect()->route('home')->with('success', __('Your credit balance has been increased!'));
     }
 
+    public function FreePay(ShopProduct $shopProduct): RedirectResponse
+    {
+        return $this->handleFreeProduct($shopProduct);
+    }
+
     public function pay(Request $request)
     {
+        $this->checkPermission(self::BUY_PERMISSION);
+
+        $request->validate([
+            'product_id' => 'required|string|exists:shop_products,id',
+            'payment_method' => 'nullable|string|max:191',
+            'coupon_code' => 'nullable|string|max:191',
+        ]);
+
         try {
             $user = Auth::user();
             $user = User::findOrFail($user->id);
             $productId = $request->product_id;
             $shopProduct = ShopProduct::findOrFail($productId);
+
+            if ($shopProduct->disabled) {
+                return redirect()->route('store.index')->with('error', __('This product is currently unavailable.'));
+            }
 
             $paymentGateway = $request->payment_method;
             $couponCode = $request->coupon_code;
@@ -157,6 +175,9 @@ class PaymentController extends Controller
                 return $this->handleFreeProduct($shopProduct);
             }
 
+            $paymentGatewayMeta = $this->resolveEnabledPaymentGatewayMeta($paymentGateway);
+            $paymentGateway = $paymentGatewayMeta['name'];
+
             // create a new payment
             $payment = Payment::create([
                 'user_id' => $user->id,
@@ -173,9 +194,11 @@ class PaymentController extends Controller
                 'shop_item_product_id' => $shopProduct->id,
             ]);
 
-            $paymentGatewayExtension = ExtensionHelper::getExtensionClass($paymentGateway);
+            $paymentGatewayExtension = $paymentGatewayMeta['class'];
             $redirectUrl = $paymentGatewayExtension::getRedirectUrl($payment, $shopProduct, $subtotal);
 
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (Exception $e) {
             Log::error($e->getMessage());
             return redirect()->route('store.index')->with('error', __('Oops, something went wrong! Please try again later.'));
@@ -192,6 +215,60 @@ class PaymentController extends Controller
         return redirect()->route('store.index')->with('info', 'Payment was Canceled');
     }
 
+    private function enabledPaymentGatewayMeta(): array
+    {
+        $gateways = [];
+        $extensions = ExtensionHelper::getAllExtensionsByNamespace('PaymentGateways');
+
+        foreach ($extensions as $extension) {
+            $extensionName = basename($extension);
+            $extensionSettings = ExtensionHelper::getExtensionSettings($extensionName);
+            if (!$extensionSettings || $extensionSettings->enabled == false) {
+                continue;
+            }
+
+            $displayName = (string) (ExtensionHelper::getExtensionConfig($extensionName, 'name') ?? '');
+            if ($displayName === '') {
+                continue;
+            }
+
+            $extensionClass = ExtensionHelper::getExtensionClass($extensionName);
+            if (!is_string($extensionClass) || !class_exists($extensionClass)) {
+                continue;
+            }
+
+            $gateways[$displayName] = [
+                'name' => $displayName,
+                'extension' => $extensionName,
+                'class' => $extensionClass,
+            ];
+        }
+
+        return $gateways;
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function resolveEnabledPaymentGatewayMeta(?string $requestedGateway): array
+    {
+        $gatewayName = is_string($requestedGateway) ? trim($requestedGateway) : '';
+        if ($gatewayName === '') {
+            throw ValidationException::withMessages([
+                'payment_method' => [__('Please choose a valid payment method.')],
+            ]);
+        }
+
+        $enabledGateways = $this->enabledPaymentGatewayMeta();
+        if (!array_key_exists($gatewayName, $enabledGateways)) {
+            throw ValidationException::withMessages([
+                'payment_method' => [__('The selected payment method is unavailable.')],
+            ]);
+        }
+
+        return $enabledGateways[$gatewayName];
+    }
+
     /**
      * @return JsonResponse|mixed
      *
@@ -206,7 +283,7 @@ class PaymentController extends Controller
         return datatables($query)
 
             ->addColumn('user', function (Payment $payment) {
-                return ($payment->user) ? '<a href="' . route('admin.users.show', $payment->user->id) . '">' . $payment->user->name . '</a>' : __('Unknown user');
+                return ($payment->user) ? '<a href="' . route('admin.users.show', $payment->user->id) . '">' . e($payment->user->name) . '</a>' : __('Unknown user');
             })
             ->editColumn('amount', function (Payment $payment, CurrencyHelper $currencyHelper) {
                 return $payment->type == 'Credits' ? $currencyHelper->formatForDisplay($payment->amount) : $payment->amount;

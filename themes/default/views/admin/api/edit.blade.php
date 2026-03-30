@@ -1,7 +1,6 @@
 @extends('layouts.main')
 
 @section('content')
-    <!-- CONTENT HEADER -->
     <section class="content-header">
         <div class="container-fluid">
             <div class="row mb-2">
@@ -21,48 +20,22 @@
             </div>
         </div>
     </section>
-    <!-- END CONTENT HEADER -->
 
-    <!-- MAIN CONTENT -->
     <section class="content">
         <div class="container-fluid">
-
-            <div class="row">
-                <div class="col-lg-6">
-                    <div class="card">
-                        <div class="card-body">
-                            <form action="{{route('admin.api.update' , $applicationApi->token)}}" method="POST">
-                                @csrf
-                                @method('PATCH')
-
-                                <div class="form-group">
-                                    <label for="memo">{{__('Memo')}}</label>
-                                    <input value="{{$applicationApi->memo}}" id="memo" name="memo" type="text"
-                                           class="form-control @error('memo') is-invalid @enderror">
-                                    @error('memo')
-                                    <div class="invalid-feedback">
-                                        {{$message}}
-                                    </div>
-                                    @enderror
-                                </div>
-
-                                <div class="form-group text-right">
-                                    <button type="submit" class="btn btn-primary">
-                                        {{__('Submit')}}
-                                    </button>
-                                </div>
-
-                                <input type="hidden" name="_token" value="{{ csrf_token() }}">
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
+            @include('admin.api._form', [
+                'heroKicker' => __('Update Credentials'),
+                'heroTitle' => __('Refine an existing token without losing the audit trail'),
+                'heroDescription' => __('Adjust the description or scope profile so the integration keeps exactly the access it needs and nothing more.'),
+                'formAction' => route('admin.api.update', $applicationApi->token),
+                'method' => 'PATCH',
+                'panelTitle' => __('Credential details'),
+                'panelCaption' => __('Review the current access profile before saving changes.'),
+                'submitLabel' => __('Save Changes'),
+                'memoValue' => old('memo', $applicationApi->memo),
+                'scopesValue' => old('scopes', implode(',', $applicationApi->normalizedScopes())),
+                'availableScopes' => $availableScopes,
+            ])
         </div>
     </section>
-    <!-- END CONTENT -->
-
-
-
 @endsection

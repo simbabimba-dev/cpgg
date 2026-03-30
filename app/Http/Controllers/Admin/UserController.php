@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Spatie\QueryBuilder\QueryBuilder;
@@ -85,54 +85,9 @@ class UserController extends Controller
     {
         $this->checkPermission(self::READ_PERMISSION);
 
-        $referralRecords = DB::table('user_referrals')->where('referral_id', '=', $user->id)->get();
-        $allReferrals = [];
-
-        foreach ($referralRecords as $referral) {
-            $deleted = $referral->deleted_at !== null;
-
-            if ($deleted) {
-                $deletedId = $referral->deleted_user_id;
-                $name = $referral->deleted_username ? $referral->deleted_username . ' (deleted)' : 'Deleted User';
-
-                $allReferrals[] = (object) [
-                    'id' => $deletedId,
-                    'name' => $name,
-                    'created_at' => \Carbon\Carbon::parse($referral->created_at),
-                    'deleted' => true,
-                ];
-            } else {
-                $userObj = User::query()->find($referral->registered_user_id);
-                if ($userObj) {
-                    $allReferrals[] = (object) [
-                        'id' => $userObj->id,
-                        'name' => $userObj->name,
-                        'created_at' => $userObj->created_at,
-                        'deleted' => false,
-                    ];
-                } else {
-                    if ($referral->deleted_user_id) {
-                        $allReferrals[] = (object) [
-                            'id' => $referral->deleted_user_id,
-                            'name' => ($referral->deleted_username ? $referral->deleted_username . ' (deleted)' : 'Deleted User'),
-                            'created_at' => \Carbon\Carbon::parse($referral->created_at),
-                            'deleted' => true,
-                        ];
-                    } else {
-                        $allReferrals[] = (object) [
-                            'id' => 'N/A',
-                            'name' => 'Unknown (deleted)',
-                            'created_at' => \Carbon\Carbon::parse($referral->created_at),
-                            'deleted' => true,
-                        ];
-                    }
-                }
-            }
-        }
-
         return view('admin.users.show')->with([
             'user' => $user,
-            'referrals' => $allReferrals,
+            'referrals' => $this->getReferralsForUser($user),
             'locale_datatables' => $locale_settings->datatables,
             'credits_display_name' => $general_settings->credits_display_name
         ]);
@@ -147,24 +102,20 @@ class UserController extends Controller
     {
         $this->checkPermission(self::READ_PERMISSION);
 
-        $users = QueryBuilder::for(User::query())
-            ->allowedFilters(['id', 'name', 'pterodactyl_id', 'email'])
-            ->paginate(25);
-
         if ($request->query('user_id')) {
             $request->validate(['user_id' => 'required|integer|exists:users,id']);
 
             $user = User::query()->findOrFail($request->input('user_id'));
-            $user->avatarUrl = $user->getAvatar();
-
-            return $user;
+            return $this->formatUserJson($user);
         }
 
-        return $users->map(function ($item) {
-            $item->avatarUrl = $item->getAvatar();
+        $users = QueryBuilder::for(User::query()->select(['id', 'name', 'email', 'pterodactyl_id']))
+            ->allowedFilters(['id', 'name', 'pterodactyl_id', 'email'])
+            ->paginate(25);
 
-            return $item;
-        });
+        return $users->getCollection()
+            ->map(fn (User $item) => $this->formatUserJson($item))
+            ->values();
     }
 
     /**
@@ -284,9 +235,14 @@ class UserController extends Controller
 
                 $this->pterodactyl->updateUser($user->pterodactyl_id, $pteroData);
             } catch (Exception $e) {
-                Log::error($e->getMessage());
+                $errorId = (string) Str::uuid();
+                Log::error('Failed to update user on pterodactyl', [
+                    'error_id' => $errorId,
+                    'user_id' => $user->id,
+                    'exception' => $e,
+                ]);
 
-                return redirect()->back()->with('error', __('User updated, but failed to update on pterodactyl: ' . $e->getMessage()));
+                return redirect()->back()->with('error', __('User updated, but syncing with pterodactyl failed. Reference: :id', ['id' => $errorId]));
             }
         }
 
@@ -386,36 +342,45 @@ class UserController extends Controller
     {
         $this->checkPermission(self::NOTIFY_PERMISSION);
 
-//TODO: reimplement the required validation on all,users and roles . didnt work -- required_without:users,roles
         $data = $request->validate([
             'via' => 'required|min:1|array',
             'via.*' => 'required|string|in:mail,database',
             'all' => 'boolean',
-            'users' => 'min:1|array',
-            'roles' => 'min:1|array',
-            'roles.*' => 'required_without:all,users|exists:roles,id',
+            'users' => 'sometimes|array|min:1',
+            'users.*' => 'integer|exists:users,id',
+            'roles' => 'sometimes|array|min:1',
+            'roles.*' => 'integer|exists:roles,id',
             'title' => 'required|string|min:1',
             'content' => 'required|string|min:1',
         ]);
+
+        $all = $data['all'] ?? false;
+        $roles = $data['roles'] ?? [];
+        $targetUserIds = $data['users'] ?? [];
+        if (!$all && empty($roles) && empty($targetUserIds)) {
+            throw ValidationException::withMessages([
+                'users' => [__('Please select at least one target user, role, or send to all users.')],
+            ]);
+        }
+
+        $title = $this->sanitizeNotificationText($data['title']);
+        $content = $this->sanitizeNotificationText($data['content']);
 
         $mail = null;
         $database = null;
         if (in_array('database', $data['via'])) {
             $database = [
-                'title' => $data['title'],
-                'content' => $data['content'],
+                'title' => $title,
+                'content' => $content,
             ];
         }
         if (in_array('mail', $data['via'])) {
             $mail = (new MailMessage)
-                ->subject($data['title'])
-                ->markdown('mail.custom', ['content' => $data['content']]);
+                ->subject($title)
+                ->markdown('mail.custom', ['content' => $content]);
         }
-        $all = $data['all'] ?? false;
-        $roles = $data['roles'] ?? false;
-
-        if(!$roles){
-            $users = $all ? User::where('suspended', false)->get() : User::whereIn('id', $data['users'])->get();
+        if (empty($roles)) {
+            $users = $all ? User::where('suspended', false)->get() : User::whereIn('id', $targetUserIds)->get();
         } else{
             // Initialize an empty collection to hold users from all roles
             $users = collect();
@@ -463,7 +428,14 @@ class UserController extends Controller
         try {
             !$user->isSuspended() ? $user->suspend() : $user->unSuspend();
         } catch (Exception $exception) {
-            return redirect()->back()->with('error', $exception->getMessage());
+            $errorId = (string) Str::uuid();
+            Log::error('Failed to toggle user suspension', [
+                'error_id' => $errorId,
+                'user_id' => $user->id,
+                'exception' => $exception,
+            ]);
+
+            return redirect()->back()->with('error', __('Unable to update user status. Reference: :id', ['id' => $errorId]));
         }
 
         return redirect()->back()->with('success', __('User has been updated!'));
@@ -476,11 +448,23 @@ class UserController extends Controller
     {
         $this->checkPermission(self::READ_PERMISSION);
 
-        $query = User::with('discordUser')
+        $referralCounts = DB::table('user_referrals')
+            ->select('referral_id', DB::raw('COUNT(*) as referrals_count'))
+            ->groupBy('referral_id');
+
+        $query = User::query()
+            ->select('users.*')
+            ->with('discordUser')
             ->withCount('servers')
+            ->leftJoinSub($referralCounts, 'referral_counts', function ($join) {
+                $join->on('users.id', '=', 'referral_counts.referral_id');
+            })
             ->leftJoin('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
             ->leftJoin('roles', 'model_has_roles.role_id', '=', 'roles.id')
-            ->selectRaw('users.*, roles.name as role_name, (SELECT COUNT(*) FROM user_referrals WHERE user_referrals.referral_id = users.id) as referrals_count')
+            ->addSelect([
+                'roles.name as role_name',
+                DB::raw('COALESCE(referral_counts.referrals_count, 0) as referrals_count'),
+            ])
             ->where('model_has_roles.model_type', User::class);
 
         return datatables($query)
@@ -521,7 +505,8 @@ class UserController extends Controller
                 $html = '';
 
                 foreach ($user->roles as $role) {
-                    $html .= "<span style='background-color: $role->color' class='badge'>$role->name</span>";
+                    $color = preg_match('/^#([a-f0-9]{3}|[a-f0-9]{6})$/i', (string) $role->color) ? $role->color : '#6c757d';
+                    $html .= "<span style='background-color: " . e($color) . "' class='badge'>" . e($role->name) . "</span>";
                 }
 
                 return $html;
@@ -530,10 +515,93 @@ class UserController extends Controller
                 return $user->last_seen ? $user->last_seen->diffForHumans() : __('Never');
             })
             ->editColumn('name', function (User $user, PterodactylSettings $ptero_settings) {
-                return '<a class="text-info" target="_blank" href="' . $ptero_settings->panel_url . '/admin/users/view/' . $user->pterodactyl_id . '">' . e($user->name) . '</a>';
+                $panelUrl = e(rtrim($ptero_settings->panel_url, '/'));
+                $pterodactylId = (int) $user->pterodactyl_id;
+
+                return '<a class="text-info" target="_blank" href="' . $panelUrl . '/admin/users/view/' . $pterodactylId . '">' . e($user->name) . '</a>';
             })
             ->orderColumn('role', 'role_name $1')
-            ->rawColumns(['avatar', 'name', 'credits', 'role', 'usage',  'actions'])
+            ->rawColumns(['avatar', 'name', 'credits', 'role', 'actions'])
             ->make();
+    }
+
+    private function sanitizeNotificationText(string $value): string
+    {
+        $normalized = strip_tags($value);
+        return trim(preg_replace('/\s+/', ' ', $normalized) ?? '');
+    }
+
+    private function formatUserJson(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'pterodactyl_id' => $user->pterodactyl_id,
+            'avatarUrl' => $user->getAvatar(),
+        ];
+    }
+
+    private function getReferralsForUser(User $user): array
+    {
+        $referralRecords = DB::table('user_referrals')
+            ->where('referral_id', $user->id)
+            ->get();
+
+        $activeReferralUsers = User::query()
+            ->whereIn('id', $referralRecords->pluck('registered_user_id')->all())
+            ->get()
+            ->keyBy('id');
+
+        return $referralRecords
+            ->map(fn (object $referral) => $this->mapReferralRecord($referral, $activeReferralUsers))
+            ->all();
+    }
+
+    private function mapReferralRecord(object $referral, $activeReferralUsers): object
+    {
+        if ($referral->deleted_at !== null) {
+            return $this->makeDeletedReferral(
+                $referral->deleted_user_id,
+                $referral->deleted_username,
+                $referral->created_at
+            );
+        }
+
+        $activeUser = $activeReferralUsers->get($referral->registered_user_id);
+        if ($activeUser instanceof User) {
+            return (object) [
+                'id' => $activeUser->id,
+                'name' => $activeUser->name,
+                'created_at' => $activeUser->created_at,
+                'deleted' => false,
+            ];
+        }
+
+        if ($referral->deleted_user_id) {
+            return $this->makeDeletedReferral(
+                $referral->deleted_user_id,
+                $referral->deleted_username,
+                $referral->created_at
+            );
+        }
+
+        return $this->makeDeletedReferral('N/A', null, $referral->created_at, 'Unknown (deleted)');
+    }
+
+    private function makeDeletedReferral(
+        mixed $id,
+        ?string $deletedUsername,
+        mixed $createdAt,
+        string $fallbackName = 'Deleted User'
+    ): object {
+        $name = $deletedUsername ? $deletedUsername . ' (deleted)' : $fallbackName;
+
+        return (object) [
+            'id' => $id,
+            'name' => $name,
+            'created_at' => \Carbon\Carbon::parse($createdAt),
+            'deleted' => true,
+        ];
     }
 }

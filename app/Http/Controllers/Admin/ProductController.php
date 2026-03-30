@@ -78,7 +78,7 @@ class ProductController extends Controller
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|max:30',
             'price' => 'required|numeric|max:1000000|min:0',
             'memory' => 'required|numeric|max:1000000|min:0',
@@ -103,11 +103,14 @@ class ProductController extends Controller
 
         $disabled = ! is_null($request->input('disabled'));
         $oomkiller = ! is_null($request->input('oom_killer'));
-        $product = Product::create(array_merge($request->all(), ['disabled' => $disabled, 'oom_killer' => $oomkiller]));
+        $product = Product::create(array_merge($validated, [
+            'disabled' => $disabled,
+            'oom_killer' => $oomkiller,
+        ]));
 
         //link nodes and eggs
-        $product->eggs()->attach($request->input('eggs'));
-        $product->nodes()->attach($request->input('nodes'));
+        $product->eggs()->attach($validated['eggs']);
+        $product->nodes()->attach($validated['nodes']);
 
         return redirect()->route('admin.products.index')->with('success', __('Product has been created!'));
     }
@@ -157,7 +160,7 @@ class ProductController extends Controller
     {
         $this->checkPermission(self::EDIT_PERMISSION);
 
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|max:30',
             'price' => 'required|numeric|max:1000000|min:0',
             'memory' => 'required|numeric|max:1000000|min:0',
@@ -181,13 +184,16 @@ class ProductController extends Controller
 
         $disabled = ! is_null($request->input('disabled'));
         $oomkiller = ! is_null($request->input('oom_killer'));
-        $product->update(array_merge($request->all(), ['disabled' => $disabled, 'oom_killer' => $oomkiller]));
+        $product->update(array_merge($validated, [
+            'disabled' => $disabled,
+            'oom_killer' => $oomkiller,
+        ]));
 
         //link nodes and eggs
         $product->eggs()->detach();
         $product->nodes()->detach();
-        $product->eggs()->attach($request->input('eggs'));
-        $product->nodes()->attach($request->input('nodes'));
+        $product->eggs()->attach($validated['eggs']);
+        $product->nodes()->attach($validated['nodes']);
 
         return redirect()->route('admin.products.index')->with('success', __('Product has been updated!'));
     }

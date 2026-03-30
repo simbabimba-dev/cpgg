@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ServerController extends Controller
 {
@@ -178,7 +179,14 @@ class ServerController extends Controller
 
             return redirect()->route('admin.servers.index')->with('success', __('Server removed'));
         } catch (Exception $e) {
-            return redirect()->route('admin.servers.index')->with('error', __('An exception has occurred while trying to remove a resource "') . $e->getMessage() . '"');
+            $errorId = (string) Str::uuid();
+            Log::error('Failed to remove server in admin panel', [
+                'error_id' => $errorId,
+                'server_id' => $server->id,
+                'exception' => $e,
+            ]);
+
+            return redirect()->route('admin.servers.index')->with('error', __('Unable to remove the server right now. Reference: :id', ['id' => $errorId]));
         }
     }
 
@@ -197,7 +205,14 @@ class ServerController extends Controller
             ]);
             return redirect()->route('servers.index')->with('success', __('Server canceled'));
         } catch (Exception $e) {
-            return redirect()->route('servers.index')->with('error', __('An exception has occurred while trying to cancel the server"') . $e->getMessage() . '"');
+            $errorId = (string) Str::uuid();
+            Log::error('Failed to cancel server in admin panel', [
+                'error_id' => $errorId,
+                'server_id' => $server->id,
+                'exception' => $e,
+            ]);
+
+            return redirect()->route('servers.index')->with('error', __('Unable to cancel the server right now. Reference: :id', ['id' => $errorId]));
         }
     }
 
@@ -213,7 +228,14 @@ class ServerController extends Controller
         try {
             $server->isSuspended() ? $server->unSuspend() : $server->suspend();
         } catch (Exception $exception) {
-            return redirect()->back()->with('error', $exception->getMessage());
+            $errorId = (string) Str::uuid();
+            Log::error('Failed to toggle server suspension in admin panel', [
+                'error_id' => $errorId,
+                'server_id' => $server->id,
+                'exception' => $exception,
+            ]);
+
+            return redirect()->back()->with('error', __('Unable to update server status right now. Reference: :id', ['id' => $errorId]));
         }
 
         $logMessage = "The server with ID: " . $server->id . " was " .
@@ -293,9 +315,6 @@ class ServerController extends Controller
             $query->where('user_id', '=', $request->input('user'));
         }
         $query->select('servers.*');
-
-        Log::info($request->input('order'));
-
 
         return datatables($query)
             ->addColumn('user', function (Server $server) {

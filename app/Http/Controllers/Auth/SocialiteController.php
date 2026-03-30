@@ -14,6 +14,19 @@ use Exception;
 
 class SocialiteController extends Controller
 {
+    private const DISCORD_PROFILE_FIELDS = [
+        'username',
+        'avatar',
+        'discriminator',
+        'public_flags',
+        'flags',
+        'locale',
+        'mfa_enabled',
+        'premium_type',
+        'email',
+        'verified',
+    ];
+
     public function redirect(DiscordSettings $discord_settings)
     {
         $scopes = !empty($discord_settings->bot_token) && !empty($discord_settings->guild_id) ? ['guilds.join'] : [];
@@ -32,6 +45,7 @@ class SocialiteController extends Controller
         /** @var User $user */
         $user = Auth::user();
         $discord = Socialite::driver('discord')->user();
+        $discordProfilePayload = $this->sanitizeDiscordProfilePayload((array) ($discord->user ?? []));
         $botToken = $discord_settings->bot_token;
         $guildId = $discord_settings->guild_id;
         $roleId = $discord_settings->role_id;
@@ -48,8 +62,11 @@ class SocialiteController extends Controller
                     );
             }
 
-            //create discord user in db
-            DiscordUser::create(array_merge($discord->user, ['user_id' => Auth::user()->id]));
+            //create discord user in db using an explicit allowlist of known Discord profile fields
+            DiscordUser::create(array_merge(
+                ['id' => $discord->id, 'user_id' => Auth::id()],
+                $discordProfilePayload
+            ));
             $user->refresh();
 
             //update user
@@ -57,7 +74,7 @@ class SocialiteController extends Controller
             Auth::user()->increment('server_limit', $user_settings->server_limit_increment_after_verify_discord);
             Auth::user()->update(['discord_verified_at' => now()]);
         } else {
-            $user->discordUser->update($discord->user);
+            $user->discordUser->update($discordProfilePayload);
         }
 
         //force user into discord server
@@ -98,5 +115,22 @@ class SocialiteController extends Controller
             'success',
             'Discord account linked!'
         );
+    }
+
+    private function sanitizeDiscordProfilePayload(array $payload): array
+    {
+        $sanitized = [];
+        foreach (self::DISCORD_PROFILE_FIELDS as $field) {
+            if (!array_key_exists($field, $payload)) {
+                continue;
+            }
+
+            $value = $payload[$field];
+            if (is_scalar($value) || is_null($value)) {
+                $sanitized[$field] = $value;
+            }
+        }
+
+        return $sanitized;
     }
 }

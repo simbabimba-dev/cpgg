@@ -527,11 +527,21 @@
                     if (!environment) return [];
 
                     return environment.filter((variable) => {
+                        const isUserEditable = Boolean(variable.user_editable);
                         const hasRequiredRule = variable.rules?.includes("required");
                         const isDefaultNull = !variable.default_value;
 
-                        return hasRequiredRule && isDefaultNull;
+                        return isUserEditable && hasRequiredRule && isDefaultNull;
                     });
+                },
+
+                escapeHtml(value) {
+                    return String(value ?? '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
                 },
 
                 getLocationInputText() {
@@ -573,42 +583,53 @@
                 },
 
                 dispatchModal(variables) {
+                    const escapeHtml = this.escapeHtml;
+
                     Swal.fire({
                             title: '{{ __('Required Variables') }}',
                             html: `
-                      ${variables.map(variable => `
+                      ${variables.map(variable => {
+                            const ruleString = typeof variable.rules === 'string' ? variable.rules : '';
+                            const safeEnvVariable = escapeHtml(variable.env_variable);
+                            const safeName = escapeHtml(variable.name || variable.env_variable);
+                            const safeDescription = variable.description ? escapeHtml(variable.description) : '';
+                            const optionsMarkup = ruleString.includes('in:')
+                                ? (() => {
+                                    const match = ruleString.match(/in:([^|]+)/);
+                                    if (!match) {
+                                        return `<input id="${safeEnvVariable}" name="${safeEnvVariable}" type="text" required="required" class="form-control">`;
+                                    }
+
+                                    const inValues = match[1].split(',');
+                                    return `
+                                      <select name="${safeEnvVariable}" id="${safeEnvVariable}" required="required" class="custom-select">
+                                          ${inValues.map(value => {
+                                              const safeValue = escapeHtml(value);
+                                              return `<option value="${safeValue}">${safeValue}</option>`;
+                                          }).join('')}
+                                      </select>
+                                    `;
+                                })()
+                                : `<input id="${safeEnvVariable}" name="${safeEnvVariable}" type="text" required="required" class="form-control">`;
+
+                            return `
                             <div class="text-left form-group">
                               <div class="d-flex justify-content-between">
-                                <label for="${variable.env_variable}">${variable.name}</label>
-                                ${variable.description
+                                <label for="${safeEnvVariable}">${safeName}</label>
+                                ${safeDescription
                                   ? `
                                 <span>
-                                  <i data-toggle="tooltip" data-placement="top" title="${variable.description}" class="fas fa-info-circle"></i>
+                                  <i data-toggle="tooltip" data-placement="top" title="${safeDescription}" class="fas fa-info-circle"></i>
                                 </span>
                               `
                                   : ''
                                 }
                               </div>
-                              ${
-                                variable.rules.includes("in:")
-                                  ? (() => {
-                                    const inValues = variable.rules
-                                      .match(/in:([^|]+)/)[1]
-                                      .split(',');
-                                    return `
-                                  <select name="${variable.env_variable}" id="${variable.env_variable}" required="required" class="custom-select">
-                                      ${inValues.map(value => `
-                                              <option value="${value}">${value}</option>
-                                          `).join('')}
-                                  </select>
-                                `;
-                                  })()
-                                  : `<input id="${variable.env_variable}" name="${variable.env_variable}" type="text" required="required" class="form-control">`
-                        } <
-                        div id = "${variable.env_variable}-error"
-                        class = "mt-1" > < /div> <
-                        /div>
-                        `).join('')
+                              ${optionsMarkup}
+                              <div id="${safeEnvVariable}-error" class="mt-1"></div>
+                            </div>
+                        `;
+                        }).join('')
                       }
                     `,
                         confirmButtonText: '{{ __('Submit') }}',
@@ -616,63 +637,75 @@
                         cancelButtonText: '{{ __('Cancel') }}',
                         showLoaderOnConfirm: true,
                         preConfirm: async () => {
-                                const filledVariables = variables.map(variable => {
-                                    const value = document.getElementById(variable.env_variable).value;
-                                    return {
-                                        ...variable,
-                                        filled_value: value
-                                    };
-                                });
+                            const filledVariables = variables.reduce((accumulator, variable) => {
+                                const value = document.getElementById(variable.env_variable)?.value;
+                                accumulator[variable.env_variable] = value ?? '';
+                                return accumulator;
+                            }, {});
 
-                                const response = await fetch('{{ route('servers.validateDeploymentVariables') }}', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                                    },
-                                    body: JSON.stringify({
-                                        variables: filledVariables
-                                    })
+                            variables.forEach(variable => {
+                                const errorContainer = document.getElementById(`${variable.env_variable}-error`);
+                                if (errorContainer) {
+                                    errorContainer.innerHTML = '';
+                                }
+                            });
+
+                            const response = await fetch('{{ route('servers.validateDeploymentVariables') }}', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                },
+                                body: JSON.stringify({
+                                    egg_id: this.selectedEgg,
+                                    product_id: this.selectedProduct,
+                                    variables: filledVariables
                                 })
+                            });
 
-                                if (!response.ok) {
-                                    const errorData = await response.json();
-
-                                    variables.forEach(variable => {
-                                        const errorContainer = document.getElementById(
-                                            `${variable.env_variable}-error`);
-                                        if (errorContainer) {
-                                            errorContainer.innerHTML = '';
-                                        }
-                                    });
-
-                                    if (errorData.errors) {
-                                        Object.entries(errorData.errors).forEach(([key, messages]) => {
-                                            const errorContainer = document.getElementById(`${key}-error`);
-                                            if (errorContainer) {
-                                                errorContainer.innerHTML = messages.map(message => `
-                                        <small class="text-danger">${message}</small>
-                                    `).join('');
-                                            }
-                                        });
-                                    }
-
+                            let parsedData = null;
+                            const rawText = await response.text();
+                            if (rawText) {
+                                try {
+                                    parsedData = JSON.parse(rawText);
+                                } catch (e) {
+                                    Swal.showValidationMessage('{{ __('Server returned an invalid response.') }}');
                                     return false;
                                 }
+                            }
 
-                                return response.json();
-                            },
-                            didOpen: () => {
-                                $('[data-toggle="tooltip"]').tooltip();
-                            },
+                            if (!response.ok) {
+                                if (parsedData?.errors) {
+                                    Object.entries(parsedData.errors).forEach(([key, messages]) => {
+                                        const errorContainer = document.getElementById(`${key}-error`);
+                                        if (errorContainer) {
+                                            errorContainer.innerHTML = messages.map(message => `
+                                        <small class="text-danger">${message}</small>
+                                    `).join('');
+                                        }
+                                    });
+                                } else {
+                                    const message = parsedData?.message || '{{ __('Validation failed.') }}';
+                                    Swal.showValidationMessage(message);
+                                }
+
+                                return false;
+                            }
+
+                            if (!parsedData || parsedData.success !== true) {
+                                Swal.showValidationMessage('{{ __('Validation failed.') }}');
+                                return false;
+                            }
+
+                            return parsedData;
+                        },
+                        didOpen: () => {
+                            $('[data-toggle="tooltip"]').tooltip();
+                        },
                     }).then((result) => {
                     if (result.isConfirmed && result.value.success) {
-                        let variables = result.value.variables.reduce((acc, variable) => {
-                            acc[variable.env_variable] = variable.filled_value;
-                            return acc;
-                        }, {});
-
-                        document.getElementById('egg_variables').value = JSON.stringify(variables);
+                        document.getElementById('egg_variables').value = JSON.stringify(result.value.variables || {});
                         document.getElementById('serverForm').submit();
                     }
                 });

@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Validation\ValidationException;
 
 class ApplicationApiController extends Controller
 {
@@ -41,7 +42,9 @@ class ApplicationApiController extends Controller
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
-        return view('admin.api.create');
+        return view('admin.api.create', [
+            'availableScopes' => ApplicationApi::AVAILABLE_SCOPES,
+        ]);
     }
 
     /**
@@ -56,10 +59,12 @@ class ApplicationApiController extends Controller
 
         $request->validate([
             'memo' => 'nullable|string|max:60',
+            'scopes' => 'nullable|string',
         ]);
 
         ApplicationApi::create([
             'memo' => $request->input('memo'),
+            'scopes' => $this->parseScopesInput($request->input('scopes')),
         ]);
 
         return redirect()->route('admin.api.index')->with('success', __('api key created!'));
@@ -87,6 +92,7 @@ class ApplicationApiController extends Controller
         $this->checkPermission(self::WRITE_PERMISSION);
         return view('admin.api.edit', [
             'applicationApi' => $applicationApi,
+            'availableScopes' => ApplicationApi::AVAILABLE_SCOPES,
         ]);
     }
 
@@ -103,9 +109,13 @@ class ApplicationApiController extends Controller
 
         $request->validate([
             'memo' => 'nullable|string|max:60',
+            'scopes' => 'nullable|string',
         ]);
 
-        $applicationApi->update($request->all());
+        $applicationApi->update([
+            'memo' => $request->input('memo'),
+            'scopes' => $this->parseScopesInput($request->input('scopes')),
+        ]);
 
         return redirect()->route('admin.api.index')->with('success', __('api key updated!'));
     }
@@ -149,12 +159,45 @@ class ApplicationApiController extends Controller
                 ';
             })
             ->editColumn('token', function (ApplicationApi $apiKey) {
-                return "<code>{$apiKey->token}</code>";
+                return '<code>' . e($apiKey->token) . '</code>';
             })
             ->editColumn('last_used', function (ApplicationApi $apiKey) {
                 return $apiKey->last_used ? $apiKey->last_used->diffForHumans() : '';
             })
-            ->rawColumns(['actions', 'token'])
+            ->addColumn('scopes', function (ApplicationApi $apiKey) {
+                $scopes = $apiKey->normalizedScopes();
+                if (empty($scopes)) {
+                    return '<span class="badge badge-secondary">' . __('legacy compatibility') . '</span>';
+                }
+
+                $scopeBadges = collect($scopes)
+                    ->map(static fn (string $scope) => '<span class="badge badge-info mr-1 mb-1">' . e($scope) . '</span>')
+                    ->implode('');
+
+                return $scopeBadges;
+            })
+            ->rawColumns(['actions', 'token', 'scopes'])
             ->make();
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function parseScopesInput(?string $rawScopes): ?array
+    {
+        if ($rawScopes === null || trim($rawScopes) === '') {
+            return null;
+        }
+
+        $scopes = array_values(array_unique(array_filter(array_map('trim', explode(',', $rawScopes)))));
+        $allowedScopes = array_merge(ApplicationApi::AVAILABLE_SCOPES, ['*']);
+        $invalidScopes = array_values(array_filter($scopes, static fn (string $scope) => !in_array($scope, $allowedScopes, true)));
+        if (!empty($invalidScopes)) {
+            throw ValidationException::withMessages([
+                'scopes' => [__('Unknown API scopes: :scopes', ['scopes' => implode(', ', $invalidScopes)])],
+            ]);
+        }
+
+        return $scopes;
     }
 }

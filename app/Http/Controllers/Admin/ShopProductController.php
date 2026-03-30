@@ -65,7 +65,7 @@ class ShopProductController extends Controller
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
-        $request->validate([
+        $validated = $request->validate([
             'disabled' => 'nullable',
             'type' => 'required|string',
             'currency_code' => ['required', 'string', 'max:3', Rule::in(config('currency_codes'))],
@@ -76,7 +76,7 @@ class ShopProductController extends Controller
         ]);
 
         $disabled = !is_null($request->input('disabled'));
-        ShopProduct::create(array_merge($request->all(), ['disabled' => $disabled]));
+        ShopProduct::create(array_merge($validated, ['disabled' => $disabled]));
 
         return redirect()->route('admin.store.index')->with('success', __('Store item has been created!'));
     }
@@ -109,7 +109,7 @@ class ShopProductController extends Controller
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
-        $request->validate([
+        $validated = $request->validate([
             'disabled' => 'nullable',
             'type' => 'required|string',
             'currency_code' => ['required', 'string', 'max:3', Rule::in(config('currency_codes'))],
@@ -120,7 +120,7 @@ class ShopProductController extends Controller
         ]);
 
         $disabled = !is_null($request->input('disabled'));
-        $shopProduct->update(array_merge($request->all(), ['disabled' => $disabled]));
+        $shopProduct->update(array_merge($validated, ['disabled' => $disabled]));
 
         return redirect()->route('admin.store.index')->with('success', __('Store item has been updated!'));
     }

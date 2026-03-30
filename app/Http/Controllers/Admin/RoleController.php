@@ -66,14 +66,26 @@ class RoleController extends Controller
     {
         $this->checkPermission(self::CREATE_PERMISSION);
 
-        $role = Role::create([
-            'name' => $request->name,
-            'color' => $request->color,
-            'power' => $request->power
+        $data = $request->validate([
+            'name' => ['required', 'string', 'min:2', 'max:60', 'regex:/^[A-Za-z0-9 _-]+$/'],
+            'color' => ['required', 'string', 'regex:/^#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/'],
+            'power' => 'required|integer|min:0|max:2147483647',
+            'permissions' => 'sometimes|array',
+            'permissions.*' => 'integer|exists:permissions,id',
         ]);
 
-        if ($request->permissions) {
-            $collectedPermissions = collect($request->permissions)->map(fn($val)=>(int)$val);
+        if ($data['power'] > $this->getCurrentUserMaxRolePower()) {
+            return back()->with('error', __('You dont have enough Power to create that Role'));
+        }
+
+        $role = Role::create([
+            'name' => $data['name'],
+            'color' => $data['color'],
+            'power' => $data['power']
+        ]);
+
+        if (!empty($data['permissions'])) {
+            $collectedPermissions = collect($data['permissions'])->map(fn($val)=>(int)$val);
             $role->givePermissionTo($collectedPermissions);
         }
 
@@ -100,7 +112,7 @@ class RoleController extends Controller
     {
         $this->checkPermission(self::EDIT_PERMISSION);
 
-        if(Auth::user()->roles[0]->power < $role->power){
+        if ($this->getCurrentUserMaxRolePower() < (int) $role->power) {
             return back()->with("error","You dont have enough Power to edit that Role");
         }
 
@@ -119,13 +131,25 @@ class RoleController extends Controller
     {
         $this->checkPermission(self::EDIT_PERMISSION);
 
-        if(Auth::user()->roles[0]->power < $role->power){
+        if ($this->getCurrentUserMaxRolePower() < (int) $role->power) {
             return back()->with("error","You dont have enough Power to edit that Role");
         }
 
-        if ($request->permissions) {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'min:2', 'max:60', 'regex:/^[A-Za-z0-9 _-]+$/'],
+            'color' => ['required', 'string', 'regex:/^#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/'],
+            'power' => 'required|integer|min:0|max:2147483647',
+            'permissions' => 'sometimes|array',
+            'permissions.*' => 'integer|exists:permissions,id',
+        ]);
+
+        if ($data['power'] > $this->getCurrentUserMaxRolePower()) {
+            return back()->with('error', __('You dont have enough Power to set that role power'));
+        }
+
+        if (!empty($data['permissions'])) {
             if($role->id != 1){ //disable admin permissions change
-                $collectedPermissions = collect($request->permissions)->map(fn($val)=>(int)$val);
+                $collectedPermissions = collect($data['permissions'])->map(fn($val)=>(int)$val);
                 $role->syncPermissions($collectedPermissions);
             }
         }
@@ -136,9 +160,9 @@ class RoleController extends Controller
         //    ]);
         //}else{
             $role->update([
-                'name' => $request->name,
-                'color' => $request->color,
-                'power' => $request->power
+                'name' => $data['name'],
+                'color' => $data['color'],
+                'power' => $data['power']
             ]);
         //}
 
@@ -208,7 +232,7 @@ class RoleController extends Controller
             })
 
             ->editColumn('name', function (Role $role) {
-                $color = preg_match('/^[a-zA-Z0-9#\s\-(),]+$/', $role->color) ? $role->color : '#ccc';
+                $color = preg_match('/^#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/', (string) $role->color) ? $role->color : '#ccc';
                 return "<span style='background-color: " . e($color) . "' class='badge'>" . e($role->name) . "</span>";
             })
             ->editColumn('users_count', function ($query) {
@@ -222,5 +246,15 @@ class RoleController extends Controller
             })
             ->rawColumns(['actions', 'name'])
             ->make(true);
+    }
+
+    private function getCurrentUserMaxRolePower(): int
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return 0;
+        }
+
+        return (int) $user->roles()->max('power');
     }
 }
