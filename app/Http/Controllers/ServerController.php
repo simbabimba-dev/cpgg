@@ -78,7 +78,7 @@ class ServerController extends Controller
         return view('servers.index')->with([
             'servers' => $servers,
             'credits_display_name' => $this->generalSettings->credits_display_name,
-            'pterodactyl_url' => $this->pteroSettings->panel_url,
+            'pterodactyl_url' => $this->pteroSettings->getDisplayUrl(),
             'phpmyadmin_url' => $this->generalSettings->phpmyadmin_url
         ]);
     }

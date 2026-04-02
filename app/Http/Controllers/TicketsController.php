@@ -110,7 +110,7 @@ class TicketsController extends Controller
         $ticketcomments = $ticket->ticketcomments;
         $ticketcategory = $ticket->ticketcategory;
         $server = Server::where('id', $ticket->server)->first();
-        $pterodactyl_url = $ptero_settings->panel_url;
+        $pterodactyl_url = $ptero_settings->getDisplayUrl();
 
         return view('ticket.show', compact('ticket', 'ticketcategory', 'ticketcomments', 'server', 'pterodactyl_url'));
     }

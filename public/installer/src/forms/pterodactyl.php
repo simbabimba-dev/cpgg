@@ -78,6 +78,7 @@ if (isset($_POST['checkPtero'])) {
 
     try {
         run_console(['php', 'artisan', 'settings:set', 'PterodactylSettings', 'panel_url', $url], null, null, null, false);
+        run_console(['php', 'artisan', 'settings:set', 'PterodactylSettings', 'panel_display_url', $url], null, null, null, false);
         run_console(['php', 'artisan', 'settings:set', 'PterodactylSettings', 'admin_token', $key], null, null, null, false);
         run_console(['php', 'artisan', 'settings:set', 'PterodactylSettings', 'user_token', $clientkey], null, null, null, false);
         wh_log('Database updated with pterodactyl Settings.', 'debug');

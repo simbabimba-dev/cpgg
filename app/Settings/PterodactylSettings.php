@@ -9,6 +9,7 @@ class PterodactylSettings extends Settings
     public string $admin_token = '';
     public string $user_token = '';
     public string $panel_url = '';
+    public string $panel_display_url = '';
     public int $per_page_limit = 50;
 
     public static function group(): string
@@ -42,6 +43,7 @@ class PterodactylSettings extends Settings
     {
         return [
             'panel_url' => 'required|string|url',
+            'panel_display_url' => 'nullable|string|url',
             'admin_token' => 'required|string',
             'user_token' => 'required|string',
             'per_page_limit' => 'required|integer|min:1|max:10000',
@@ -78,6 +80,23 @@ class PterodactylSettings extends Settings
                 'type' => 'number',
                 'description' => 'The number of servers to show per page for the API call. Only change this when needed.',
             ],
+            'panel_display_url' => [
+                'label' => 'Panel Display URL',
+                'type' => 'string',
+                'description' => 'The URL shown in the admin UI linking to your Pterodactyl panel. Leave empty to use the API panel URL.',
+            ],
         ];
+    }
+
+    /**
+     * Get display URL without trailing slash. Falls back to panel_url when empty.
+     *
+     * @return string
+     */
+    public function getDisplayUrl(): string
+    {
+        $url = $this->panel_display_url ?: $this->panel_url;
+
+        return rtrim($url, '/');
     }
 }

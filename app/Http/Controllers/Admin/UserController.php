@@ -530,7 +530,7 @@ class UserController extends Controller
                 return $user->last_seen ? $user->last_seen->diffForHumans() : __('Never');
             })
             ->editColumn('name', function (User $user, PterodactylSettings $ptero_settings) {
-                return '<a class="text-info" target="_blank" href="' . $ptero_settings->panel_url . '/admin/users/view/' . $user->pterodactyl_id . '">' . e($user->name) . '</a>';
+                return '<a class="text-info" target="_blank" href="' . $ptero_settings->getDisplayUrl() . '/admin/users/view/' . $user->pterodactyl_id . '">' . e($user->name) . '</a>';
             })
             ->orderColumn('role', 'role_name $1')
             ->rawColumns(['avatar', 'name', 'credits', 'role', 'usage',  'actions'])
