@@ -25,7 +25,7 @@
         <div class="container-fluid">
 
             <div class="mb-3 text-right">
-                <button type="button" data-toggle="modal" data-target="#redeemVoucherModal" class="btn btn-primary">
+                <button type="button" data-toggle="modal" data-target="#redeemVoucherModal" class="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-accent-600 text-white hover:bg-accent-700 shadow-sm">
                     <i class="mr-2 fas fa-money-check-alt"></i>{{ __('Redeem code') }}
                 </button>
             </div>
@@ -36,13 +36,13 @@
                         <h5 class="card-title"><i class="mr-2 fa fa-coins"></i>{{ $credits_display_name }}</h5>
                     </div>
                     <div class="card-body">
-                        <table class="table table-striped table-responsive-sm">
-                            <thead>
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th>{{ __('Price') }}</th>
-                                    <th>{{ __('Type') }}</th>
-                                    <th>{{ __('Description') }}</th>
-                                    <th></th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ __('Price') }}</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ __('Type') }}</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ __('Description') }}</th>
+                                    <th class="px-6 py-3"></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -60,8 +60,7 @@
 
                                             {{ $shopProduct->display }}
                                         </td>
-                                        <td><a href="{{ route('checkout', $shopProduct->id) }}"
-                                                class="btn btn-info @cannot('user.shop.buy') disabled @endcannot">{{ __('Purchase') }}</a>
+                                        <td><a href="{{ route('checkout', $shopProduct->id) }}" class="inline-flex items-center px-3 py-1.5 rounded-md bg-accent-500 text-white hover:bg-accent-600 @cannot('user.shop.buy') opacity-50 cursor-not-allowed @endcannot">{{ __('Purchase') }}</a>
                                         </td>
                                     </tr>
                                 @endforeach

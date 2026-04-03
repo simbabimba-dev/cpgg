@@ -30,16 +30,16 @@
                         <div class="card-header">
                             <div class="d-flex justify-content-between">
                                 <h5 class="card-title"><i class="fas fa-ticket-alt mr-2"></i>{{__('My Ticket')}}</h5>
-                                <a href="{{route('ticket.new')}}" class="btn btn-sm btn-primary @cannot("user.ticket.write")) disabled @endcannot">
+                                <a href="{{route('ticket.new')}}" class="inline-flex items-center gap-1 px-3 py-2 rounded-md text-sm font-medium bg-accent-600 text-white hover:bg-accent-700 shadow-sm @cannot("user.ticket.write")) opacity-50 cursor-not-allowed @endcannot">
                                     <i class="fas fa-plus mr-1"></i>{{__('New Ticket')}}</a>
                             </div>
                         </div>
                         <div class="card-body table-responsive">
 
-                            <table id="datatable" class="table table-striped">
-                                <thead>
+                            <table id="datatable" class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <thead class="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th>{{__('Category')}}</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{__('Category')}}</th>
                                     <th>{{__('Title')}}</th>
                                     <th>{{__('Priority')}}</th>
                                     <th>{{__('Status')}}</th>

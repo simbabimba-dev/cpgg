@@ -135,21 +135,21 @@ class TicketsController extends Controller
                 return '<a href="'.route('admin.users.show', $tickets->user->id).'">'.$tickets->user->name.'</a>';
             })
             ->addColumn('actions', function (Ticket $tickets) {
-                $statusButtonColor = ($tickets->status == "Closed") ? 'btn-success' : 'btn-warning';
+                $statusButtonColor = ($tickets->status == "Closed") ? 'bg-success hover:bg-success-700' : 'bg-warning hover:bg-warning-700';
                 $statusButtonIcon = ($tickets->status == "Closed") ? 'fa-redo' : 'fa-times';
                 $statusButtonText = ($tickets->status == "Closed") ? __('Reopen') : __('Close');
 
                 return '
-                            <a data-content="'.__('View').'" data-toggle="popover" data-trigger="hover" data-placement="top" href="'.route('admin.ticket.show', ['ticket_id' => $tickets->ticket_id]).'" class="mr-1 text-white btn btn-sm btn-info"><i class="fas fa-eye"></i></a>
+                            <a data-content="'.__('View').'" data-toggle="popover" data-trigger="hover" data-placement="top" href="'.route('admin.ticket.show', ['ticket_id' => $tickets->ticket_id]).'" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-accent-600 text-white hover:bg-accent-700"><i class="fas fa-eye"></i></a>
                             <form class="d-inline"  method="post" action="'.route('admin.ticket.changeStatus', ['ticket_id' => $tickets->ticket_id]).'">
                                 '.csrf_field().'
                                 '.method_field('POST').'
-                            <button data-content="'.__($statusButtonText).'" data-toggle="popover" data-trigger="hover" data-placement="top" class="text-white btn btn-sm '.$statusButtonColor.'  mr-1"><i class="fas '.$statusButtonIcon.'"></i></button>
+                            <button data-content="'.__($statusButtonText).'" data-toggle="popover" data-trigger="hover" data-placement="top" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs text-white '.$statusButtonColor.'"><i class="fas '.$statusButtonIcon.'"></i></button>
                             </form>
                             <form class="d-inline"  method="post" action="'.route('admin.ticket.delete', ['ticket_id' => $tickets->ticket_id]).'">
                                 '.csrf_field().'
                                 '.method_field('POST').'
-                            <button data-content="'.__('Delete').'" data-toggle="popover" data-trigger="hover" data-placement="top" class="mr-1 text-white btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                            <button data-content="'.__('Delete').'" data-toggle="popover" data-trigger="hover" data-placement="top" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-danger text-white hover:bg-danger-700"><i class="fas fa-trash"></i></button>
                             </form>
                 ';
             })
@@ -286,12 +286,12 @@ class TicketsController extends Controller
                             <form class="d-inline"  method="post" action="'.route('admin.ticket.blacklist.change', ['id' => $blacklist->id]).'">
                                 '.csrf_field().'
                                 '.method_field('POST').'
-                            <button data-content="'.__('Change Status').'" data-toggle="popover" data-trigger="hover" data-placement="top" class="mr-1 text-white btn btn-sm btn-warning"><i class="fas fa-sync-alt"></i></button>
+                            <button data-content="'.__('Change Status').'" data-toggle="popover" data-trigger="hover" data-placement="top" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-warning text-white hover:bg-warning-700"><i class="fas fa-sync-alt"></i></button>
                             </form>
                             <form class="d-inline"  method="post" action="'.route('admin.ticket.blacklist.delete', ['id' => $blacklist->id]).'">
                                 '.csrf_field().'
                                 '.method_field('POST').'
-                            <button data-content="'.__('Delete').'" data-toggle="popover" data-trigger="hover" data-placement="top" class="mr-1 text-white btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                            <button data-content="'.__('Delete').'" data-toggle="popover" data-trigger="hover" data-placement="top" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-danger text-white hover:bg-danger-700"><i class="fas fa-trash"></i></button>
                             </form>
                 ';
             })

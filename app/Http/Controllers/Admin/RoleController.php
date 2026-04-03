@@ -194,12 +194,12 @@ class RoleController extends Controller
             })
             ->addColumn('actions', function (Role $role) {
                 return '
-                            <a title="Edit" href="'.route("admin.roles.edit", $role).'" class="btn btn-sm btn-info"><i
+                            <a title="Edit" href="'.route("admin.roles.edit", $role).'" class="inline-flex items-center justify-center px-2 py-1 rounded text-xs bg-accent-600 text-white hover:bg-accent-700"><i
                                     class="fa fas fa-edit"></i></a>
                             <form class="d-inline" method="post" action="'.route("admin.roles.destroy", $role).'">
                             ' . csrf_field() . '
                             ' . method_field("DELETE") . '
-                                <button title="Delete" type="submit" class="btn btn-sm btn-danger confirm"><i
+                                <button title="Delete" type="submit" class="inline-flex items-center justify-center px-2 py-1 rounded text-xs bg-danger text-white hover:bg-danger-700 confirm"><i
                                         class="fa fas fa-trash"></i></button>
                             </form>
                 ';

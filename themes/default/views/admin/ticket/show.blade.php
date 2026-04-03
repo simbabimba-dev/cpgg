@@ -1,167 +1,195 @@
 @extends('layouts.main')
 
 @section('content')
-    <!-- CONTENT HEADER -->
-    <section class="content-header">
-        <div class="container-fluid">
-            <div class="row mb-2">
-                <div class="col-sm-6">
-                    <h1>{{ __('Ticket') }}</h1>
-                </div>
-                <div class="col-sm-6">
-                    <ol class="breadcrumb float-sm-right">
-                        <li class="breadcrumb-item"><a href="{{ route('home') }}">{{ __('Dashboard') }}</a></li>
-                        <li class="breadcrumb-item"><a class="text-muted"
-                                                       href="{{ route('admin.ticket.index') }}">{{ __('Ticket') }}</a>
-                        </li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-    </section>
-    <!-- END CONTENT HEADER -->
-
-    <!-- MAIN CONTENT -->
+    <div class="mb-6 flex flex-col justify-between gap-y-4 sm:flex-row sm:items-center">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">{{ __('Ticket') }}</h1>
+        <ol class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+            <li>
+                <a href="{{ route('home') }}" class="hover:text-accent-600 dark:hover:text-accent-400">{{ __('Dashboard') }}</a>
+            </li>
+            <li>/</li>
+            <li>
+                <a href="{{ route('admin.ticket.index') }}" class="hover:text-accent-600 dark:hover:text-accent-400">{{ __('Ticket') }}</a>
+            </li>
+            <li>/</li>
+            <li>
+                <span class="text-gray-700 dark:text-gray-300">#{{ $ticket->ticket_id }}</span>
+            </li>
+        </ol>
+    </div>
     <section class="content">
-        <div class="container-fluid">
-            <div class="row">
-                <div class="col-lg-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="d-flex justify-content-between">
-                                <h5 class="card-title"><i class="fas fa-users mr-2"></i>#{{ $ticket->ticket_id }}</h5>
+        <div class="w-full">
+            <div class="grid grid-cols-1 gap-6">
+                
+                <div class="bg-white rounded-lg shadow-md overflow-hidden dark:bg-gray-800">
+                    <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center dark:border-gray-700">
+                        <h5 class="text-lg font-medium text-gray-800 dark:text-white">
+                            <i class="fas fa-info-circle mr-2 text-gray-500 dark:text-gray-400"></i>#{{ $ticket->ticket_id }}
+                        </h5>
+                    </div>
+                    <div class="p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            @if(!empty($server))
+                                <div class="flex flex-col">
+                                    <span class="text-gray-500 dark:text-gray-400">{{ __('Server') }}:</span>
+                                    <a href="{{ $pterodactyl_url . '/admin/servers/view/' . $server->pterodactyl_id }}" target="__blank" class="font-medium text-accent-600 hover:underline dark:text-accent-400">
+                                        {{ $server->name }}
+                                    </a>
+                                </div>
+                            @endif
+                            <div class="flex flex-col">
+                                <span class="text-gray-500 dark:text-gray-400">{{ __('Title') }}:</span>
+                                <span class="font-medium text-gray-900 dark:text-gray-100">{{ $ticket->title }}</span>
                             </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="ticket-info">
-                                @if(!empty($server))
-                                <p><b>{{__("Server")}}:</b> <a href="{{ $pterodactyl_url . '/admin/servers/view/' . $server->pterodactyl_id }}" target="__blank">{{ $server->name }}</a></p>
-                                @endif
-                                <p><b>{{__("Title")}}:</b> {{ $ticket->title }}</p>
-                                <p><b>{{__("Category")}}:</b> {{ $ticketcategory->name }}</p>
-                                <p><b>{{__("Status")}}:</b>
-                                @switch($ticket->status)
+                            <div class="flex flex-col">
+                                <span class="text-gray-500 dark:text-gray-400">{{ __('Category') }}:</span>
+                                <span class="font-medium text-gray-900 dark:text-gray-100">{{ $ticketcategory->name }}</span>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-gray-500 dark:text-gray-400">{{ __('Created') }}:</span>
+                                <span class="font-medium text-gray-900 dark:text-gray-100">{{ $ticket->created_at->diffForHumans() }}</span>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-gray-500 dark:text-gray-400 mb-1">{{ __('Status') }}:</span>
+                                <div>
+                                    @switch($ticket->status)
                                         @case("Open")
-                                            <span class="badge badge-success">{{__("Open")}}</span>
-                                        @break
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">{{ __('Open') }}</span>
+                                            @break
                                         @case("Reopened")
-                                            <span class="badge badge-success">{{__("Reopened")}}</span>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">{{ __('Reopened') }}</span>
                                             @break
                                         @case("Closed")
-                                            <span class="badge badge-danger">{{__("Closed")}}</span>
-                                        @break
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">{{ __('Closed') }}</span>
+                                            @break
                                         @case("Answered")
-                                            <span class="badge badge-info">{{__("Answered")}}</span>
-                                        @break
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent-100 text-accent-800 dark:bg-accent-900 dark:text-accent-200">{{ __('Answered') }}</span>
+                                            @break
                                         @case("Client Reply")
-                                           <span class="badge badge-warning">{{__("Client Reply")}}</span>
-                                        @break
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">{{ __('Client Reply') }}</span>
+                                            @break
                                     @endswitch
-                                </p>
-                                    <p><b>Priority:</b>
-                                        @switch($ticket->priority)
-                                            @case("Low")
-                                                <span class="badge badge-success">{{__("Low")}}</span>
-                                                @break
-                                            @case("Medium")
-                                               <span class="badge badge-warning">{{__("Medium")}}</span>
-                                                @break
-                                            @case("High")
-                                               <span class="badge badge-danger">{{__("High")}}</span>
-                                                @break
-                                        @endswitch
-                                    </p>
-                                    <p><b>{{__("Created on")}}:</b> {{ $ticket->created_at->diffForHumans() }}</p>
-                                    @if($ticket->status=='Closed')
-                                        <form class="d-inline" method="post"
-                                              action="{{route('admin.ticket.changeStatus', ['ticket_id' => $ticket->ticket_id ])}}">
-                                            {{csrf_field()}}
-                                            {{method_field("POST") }}
-                                            <button data-content="{{__("Reopen")}}" data-toggle="popover"
-                                                    data-trigger="hover" data-placement="top"
-                                                    class="btn btn-sm text-white btn-success mr-1"><i
-                                                    class="fas fa-redo"></i>{{__("Reopen")}}</button>
-                                        </form>
-                                    @else
-                                        <form class="d-inline" method="post"
-                                              action="{{route('admin.ticket.changeStatus', ['ticket_id' => $ticket->ticket_id ])}}">
-                                            {{csrf_field()}}
-                                            {{method_field("POST") }}
-                                            <button data-content="{{__("Close")}}" data-toggle="popover"
-                                                    data-trigger="hover" data-placement="top"
-                                                    class="btn btn-sm text-white btn-warning mr-1"><i
-                                                    class="fas fa-times"></i>{{__("Close")}}</button>
-                                        </form>
-                                    @endif
+                                </div>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-gray-500 dark:text-gray-400 mb-1">{{ __('Priority') }}:</span>
+                                <div>
+                                    @switch($ticket->priority)
+                                        @case("Low")
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">{{ __('Low') }}</span>
+                                            @break
+                                        @case("Medium")
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">{{ __('Medium') }}</span>
+                                            @break
+                                        @case("High")
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">{{ __('High') }}</span>
+                                            @break
+                                    @endswitch
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-                <div class="col-lg-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="d-flex justify-content-between">
-                                <h5 class="card-title"><i class="fas fa-cloud mr-2"></i>{{__('Comment')}}</h5>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="card">
-                                <div class="card-header">
-                                    <div class="d-flex justify-content-between">
-                                        <h5 class="card-title"><img
-                                            src="https://www.gravatar.com/avatar/{{ md5(strtolower($ticket->user->email)) }}?s=25"
-                                            class="user-image" alt="User Image">
-                                        <a href="/admin/users/{{$ticket->user->id}}">{{ $ticket->user->name }}</a>
-                                            @foreach ($ticket->user->roles as $role)
-                                                <span style='background-color: {{$role->color}}' class='badge'>{{$role->name}}</span>
-                                            @endforeach
-                                    </h5>
-                                        <span class="badge badge-primary">{{ $ticket->created_at->diffForHumans() }}</span>
-                                    </div>
-                                </div>
-                                <div class="card-body" style="white-space:pre-wrap">{{ $ticket->message }}</div>
-                            </div>
-                            @foreach ($ticketcomments as $ticketcomment)
-                            <div class="card">
-                                <div class="card-header">
-                                    <div class="d-flex justify-content-between">
-                                        <h5 class="card-title"><img
-                                            src="https://www.gravatar.com/avatar/{{ md5(strtolower($ticketcomment->user->email)) }}?s=25"
-                                            class="user-image" alt="User Image">
-                                        <a href="/admin/users/{{$ticketcomment->user->id}}">{{ $ticketcomment->user->name }}</a>
-                                            @foreach ($ticketcomment->user->roles as $role)
-                                                <span style='background-color: {{$role->color}}' class='badge'>{{$role->name}}</span>
-                                            @endforeach
-                                    </h5>
-                                        <span class="badge badge-primary">{{ $ticketcomment->created_at->diffForHumans() }}</span>
-                                    </div>
-                                </div>
-                                <div class="card-body" style="white-space:pre-wrap">{{ $ticketcomment->ticketcomment }}</div>
-                            </div>
-                            @endforeach
-                            <div class="comment-form">
-                                <form action="{{ route('admin.ticket.reply')}}" method="POST" class="form">
-                                    {!! csrf_field() !!}
-                                    <input type="hidden" name="ticket_id" value="{{ $ticket->id }}">
-                                    <div class="form-group{{ $errors->has('ticketcomment') ? ' has-error' : '' }}">
-                                        <textarea rows="10" id="ticketcomment" class="form-control" name="ticketcomment"></textarea>
-                                        @if ($errors->has('ticketcomment'))
-                                        <span class="help-block">
-                                            <strong>{{ $errors->first('ticketcomment') }}</strong>
-                                        </span>
-                                        @endif
-                                    </div>
-                                    <div class="form-group">
-                                        <button type="submit" class="btn btn-primary">Submit</button>
-                                    </div>
+
+                        <div class="mt-6 flex justify-end">
+                            @if($ticket->status == 'Closed')
+                                <form action="{{ route('admin.ticket.changeStatus', ['ticket_id' => $ticket->ticket_id ]) }}" method="POST">
+                                    @csrf
+                                    @method("POST")
+                                    <button type="submit" class="inline-flex items-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:hover:bg-green-500">
+                                        <i class="fas fa-redo mr-2"></i>{{ __('Reopen') }}
+                                    </button>
                                 </form>
-                            </div>
+                            @else
+                                <form action="{{ route('admin.ticket.changeStatus', ['ticket_id' => $ticket->ticket_id ]) }}" method="POST">
+                                    @csrf
+                                    @method("POST")
+                                    <button type="submit" class="inline-flex items-center rounded-md bg-yellow-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 dark:hover:bg-yellow-400">
+                                        <i class="fas fa-times mr-2"></i>{{ __('Close') }}
+                                    </button>
+                                </form>
+                            @endif
                         </div>
                     </div>
                 </div>
+
+                <div class="bg-white rounded-lg shadow-md overflow-hidden dark:bg-gray-800">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <h5 class="text-lg font-medium text-gray-800 dark:text-white">
+                            <i class="fas fa-comments mr-2 text-gray-500 dark:text-gray-400"></i>{{ __('Conversation') }}
+                        </h5>
+                    </div>
+                    <div class="p-6 bg-gray-50 dark:bg-gray-900">
+                        
+                        <div class="mb-6 rounded-lg bg-white shadow dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50 rounded-t-lg dark:bg-gray-700 dark:border-gray-600">
+                                <div class="flex items-center">
+                                    <img class="h-8 w-8 rounded-full" src="https://www.gravatar.com/avatar/{{ md5(strtolower($ticket->user->email)) }}?s=160" alt="User Image">
+                                    <div class="ml-3">
+                                        <a href="/admin/users/{{$ticket->user->id}}" class="text-sm font-medium text-gray-900 hover:underline dark:text-white">{{ $ticket->user->name }}</a>
+                                        <div class="flex space-x-1 mt-0.5">
+                                            @foreach ($ticket->user->roles as $role)
+                                                <span style="background-color: {{$role->color}}" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-white shadow-sm">
+                                                    {{$role->name}}
+                                                </span>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="text-xs text-gray-500 dark:text-gray-400">{{ $ticket->created_at->diffForHumans() }}</span>
+                            </div>
+                            <div class="px-4 py-4 text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                                {{ $ticket->message }}
+                            </div>
+                        </div>
+
+                        @foreach ($ticketcomments as $ticketcomment)
+                            <div class="mb-6 rounded-lg bg-white shadow dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50 rounded-t-lg dark:bg-gray-700 dark:border-gray-600">
+                                    <div class="flex items-center">
+                                        <img class="h-8 w-8 rounded-full" src="https://www.gravatar.com/avatar/{{ md5(strtolower($ticketcomment->user->email)) }}?s=160" alt="User Image">
+                                        <div class="ml-3">
+                                            <a href="/admin/users/{{$ticketcomment->user->id}}" class="text-sm font-medium text-gray-900 hover:underline dark:text-white">{{ $ticketcomment->user->name }}</a>
+                                            <div class="flex space-x-1 mt-0.5">
+                                                @foreach ($ticketcomment->user->roles as $role)
+                                                    <span style="background-color: {{$role->color}}" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-white shadow-sm">
+                                                        {{$role->name}}
+                                                    </span>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ $ticketcomment->created_at->diffForHumans() }}</span>
+                                </div>
+                                <div class="px-4 py-4 text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                                    {{ $ticketcomment->ticketcomment }}
+                                </div>
+                            </div>
+                        @endforeach
+
+                        <div class="mt-8">
+                            <form action="{{ route('admin.ticket.reply')}}" method="POST">
+                                @csrf
+                                <input type="hidden" name="ticket_id" value="{{ $ticket->id }}">
+                                <div class="mb-4">
+                                    <label for="ticketcomment" class="sr-only">{{ __('Reply') }}</label>
+                                    <textarea rows="6" id="ticketcomment" name="ticketcomment"
+                                              class="block w-full rounded-md border-gray-300 shadow-sm focus:border-accent-500 focus:ring-accent-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 @error('ticketcomment') border-red-500 @enderror"
+                                              placeholder="{{ __('Write a reply...') }}"></textarea>
+                                    @error('ticketcomment')
+                                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                    @enderror
+                                </div>
+                                <div class="flex justify-end">
+                                    <button type="submit" class="inline-flex items-center rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 dark:hover:bg-accent-500">
+                                        {{ __('Submit Reply') }}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                    </div>
+                </div>
+
             </div>
         </div>
     </section>
-    <!-- END CONTENT -->
 @endsection
-

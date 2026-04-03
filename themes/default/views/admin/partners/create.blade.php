@@ -1,108 +1,91 @@
 @extends('layouts.main')
 
 @section('content')
-    <!-- CONTENT HEADER -->
-    <section class="content-header">
-        <div class="container-fluid">
-            <div class="row mb-2">
-                <div class="col-sm-6">
-                    <h1>{{__('Partner')}}</h1>
-                </div>
-                <div class="col-sm-6">
-                    <ol class="breadcrumb float-sm-right">
-                        <li class="breadcrumb-item"><a href="{{route('home')}}">{{__('Dashboard')}}</a></li>
-                        <li class="breadcrumb-item"><a href="{{route('admin.partners.index')}}">{{__('Partner')}}</a>
-                        </li>
-                        <li class="breadcrumb-item"><a class="text-muted"
-                                                       href="{{route('admin.partners.create')}}">{{__('Create')}}</a>
-                        </li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-    </section>
-    <!-- END CONTENT HEADER -->
-
-    <!-- MAIN CONTENT -->
+    <div class="mb-6 flex flex-col justify-between gap-y-4 sm:flex-row sm:items-center">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">{{__('Partner')}}</h1>
+        <ol class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+            <li>
+                <a href="{{route('home')}}" class="hover:text-accent-500 dark:hover:text-accent-400">{{__('Dashboard')}}</a>
+            </li>
+            <li>/</li>
+            <li>
+                <a href="{{route('admin.partners.index')}}" class="hover:text-accent-500 dark:hover:text-accent-400">{{__('Partner')}}</a>
+            </li>
+            <li>/</li>
+            <li>
+                <span class="text-gray-700 dark:text-gray-300">{{__('Create')}}</span>
+            </li>
+        </ol>
+    </div>
     <section class="content">
-        <div class="container-fluid">
-
-            <div class="row">
-                <div class="col-lg-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5 class="card-title">
-                                <i class="fas fa-handshake mr-2"></i>{{__('Partner details')}}
+        <div class="w-full">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="col-span-1">
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden dark:bg-gray-800">
+                        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                            <h5 class="text-lg font-medium text-gray-800 dark:text-white">
+                                <i class="fas fa-handshake mr-2 text-gray-500 dark:text-gray-400"></i>{{__('Partner details')}}
                             </h5>
                         </div>
-                        <div class="card-body">
+                        <div class="p-6">
                             <form action="{{route('admin.partners.store')}}" method="POST">
                                 @csrf
 
-                                <div class="form-group">
-
-                                    <div class="custom-control mb-3 p-0">
-                                        <label for="user_id">{{ __('User') }}:
-                                        </label>
-                                        <select id="user_id" style="width:100%" class="custom-select" name="user_id" required
-                                                autocomplete="off" @error('user_id') is-invalid @enderror>
-                                        </select>
-                                    </div>
+                                <div class="mb-4">
+                                    <label for="user_id" class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">{{ __('User') }}:</label>
+                                    <select id="user_id" style="width:100%" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-accent-500 focus:ring-accent-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white @error('user_id') border-red-500 @enderror" name="user_id" required autocomplete="off">
+                                    </select>
+                                    @error('user_id')
+                                    <p class="mt-1 text-xs text-red-500">{{$message}}</p>
+                                    @enderror
                                 </div>
 
-                                <div class="form-group">
-                                    <label for="partner_discount">{{__('Partner discount')}}
+                                <div class="mb-4">
+                                    <label for="partner_discount" class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">{{__('Partner discount')}}
                                         <i data-toggle="popover" data-trigger="hover"
-                                        data-content="{{__('The discount in percent given to the partner when purchasing credits.')}}"
-                                        class="fas fa-info-circle"></i>
+                                           data-content="{{__('The discount in percent given to the partner when purchasing credits.')}}"
+                                           class="fas fa-info-circle text-gray-400 ml-1 cursor-help dark:text-gray-500"></i>
                                     </label>
                                     <input value="{{old('partner_discount')}}" placeholder="{{__('Discount in percent')}}" id="partner_discount" name="partner_discount"
                                            type="number" step="any" min="0" max="100"
-                                           class="form-control @error('partner_discount') is-invalid @enderror">
+                                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-accent-500 focus:ring-accent-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 @error('partner_discount') border-red-500 @enderror">
                                     @error('partner_discount')
-                                    <div class="text-danger">
-                                        {{$message}}
-                                    </div>
+                                    <p class="mt-1 text-xs text-red-500">{{$message}}</p>
                                     @enderror
                                 </div>
 
-
-                                <div class="form-group">
-                                    <label for="registered_user_discount">{{__('Registered user discount')}}
+                                <div class="mb-4">
+                                    <label for="registered_user_discount" class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">{{__('Registered user discount')}}
                                         <i data-toggle="popover" data-trigger="hover"
-                                        data-content="{{__('The discount in percent given to all users registered using the partners referral link when purchasing credits.')}}"
-                                        class="fas fa-info-circle"></i>
+                                           data-content="{{__('The discount in percent given to all users registered using the partners referral link when purchasing credits.')}}"
+                                           class="fas fa-info-circle text-gray-400 ml-1 cursor-help dark:text-gray-500"></i>
                                     </label>
-                                    <div class="input-group">
+                                    <div class="flex rounded-md shadow-sm">
                                         <input value="{{old('registered_user_discount')}}" placeholder="Discount in percent" id="registered_user_discount" name="registered_user_discount"
-                                               type="number" class="form-control @error('registered_user_discount') is-invalid @enderror"
+                                               type="number" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-accent-500 focus:ring-accent-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 @error('registered_user_discount') border-red-500 @enderror"
                                                required="required">
                                     </div>
-                                @error('registered_user_discount')
-                                    <div class="text-danger">
-                                        {{$message}}
-                                    </div>
-                                @enderror
+                                    @error('registered_user_discount')
+                                    <p class="mt-1 text-xs text-red-500">{{$message}}</p>
+                                    @enderror
                                 </div>
 
-                                <div class="form-group">
-                                    <label for="referral_system_commission">{{__('Referral system commission')}}
+                                <div class="mb-4">
+                                    <label for="referral_system_commission" class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">{{__('Referral system commission')}}
                                         <i data-toggle="popover" data-trigger="hover"
-                                        data-content="{{__('Override value for referral system commission. You can set it to -1 to get the default commission from settings.')}}"
-                                        class="fas fa-info-circle"></i>
+                                           data-content="{{__('Override value for referral system commission. You can set it to -1 to get the default commission from settings.')}}"
+                                           class="fas fa-info-circle text-gray-400 ml-1 cursor-help dark:text-gray-500"></i>
                                     </label>
                                     <input value="{{old('referral_system_commission')}}" placeholder="{{__('Commission in percent')}}" id="referral_system_commission" name="referral_system_commission"
                                            type="number" step="any" min="-1" max="100"
-                                           class="form-control @error('referral_system_commission') is-invalid @enderror">
+                                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-accent-500 focus:ring-accent-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 @error('referral_system_commission') border-red-500 @enderror">
                                     @error('referral_system_commission')
-                                    <div class="text-danger">
-                                        {{$message}}
-                                    </div>
+                                    <p class="mt-1 text-xs text-red-500">{{$message}}</p>
                                     @enderror
                                 </div>
 
-                                <div class="form-group text-right">
-                                    <button type="submit" class="btn btn-primary">
+                                <div class="flex justify-end mt-6">
+                                    <button type="submit" class="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 dark:hover:bg-accent-500">
                                         {{__('Submit')}}
                                     </button>
                                 </div>
@@ -113,14 +96,8 @@
                     </div>
                 </div>
             </div>
-
-            <i class="fas"></i>
-
         </div>
     </section>
-    <!-- END CONTENT -->
-
-
     <script>
         document.addEventListener('DOMContentLoaded', (event) => {
             $('#expires_at').datetimepicker({
@@ -209,6 +186,4 @@
             @endif
         });
     </script>
-
-
 @endsection

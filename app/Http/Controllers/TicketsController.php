@@ -230,16 +230,16 @@ class TicketsController extends Controller
                 ];
             })
             ->addColumn('actions', function (Ticket $tickets) {
-                $statusButtonColor = ($tickets->status == "Closed") ? 'btn-success' : 'btn-warning';
+                $statusButtonColor = ($tickets->status == "Closed") ? 'bg-success hover:bg-success-700' : 'bg-warning hover:bg-warning-700';
                 $statusButtonIcon = ($tickets->status == "Closed") ? 'fa-redo' : 'fa-times';
                 $statusButtonText = ($tickets->status == "Closed") ? __('Reopen') : __('Close');
 
                 return '
-                            <a data-content="' . __('View') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('ticket.show', ['ticket_id' => $tickets->ticket_id]) . '" class="btn btn-sm text-white btn-info mr-1"><i class="fas fa-eye"></i></a>
+                            <a data-content="' . __('View') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('ticket.show', ['ticket_id' => $tickets->ticket_id]) . '" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-accent-600 text-white hover:bg-accent-700"><i class="fas fa-eye"></i></a>
                             <form class="d-inline"  method="post" action="' . route('ticket.changeStatus', ['ticket_id' => $tickets->ticket_id]) . '">
                                 ' . csrf_field() . '
                                 ' . method_field('POST') . '
-                            <button data-content="' . __($statusButtonText) . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="btn btn-sm text-white ' . $statusButtonColor . '  mr-1"><i class="fas ' . $statusButtonIcon . '"></i></button>
+                            <button data-content="' . __($statusButtonText) . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs text-white ' . $statusButtonColor . '"><i class="fas ' . $statusButtonIcon . '"></i></button>
                             </form>
 
                             </form>

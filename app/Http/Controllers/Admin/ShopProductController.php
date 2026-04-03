@@ -157,12 +157,12 @@ class ShopProductController extends Controller
         return datatables($query)
             ->addColumn('actions', function (ShopProduct $shopProduct) {
                 return '
-                            <a data-content="' . __('Edit') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.store.edit', $shopProduct->id) . '" class="mr-1 btn btn-sm btn-info"><i class="fas fa-pen"></i></a>
+                            <a data-content="' . __('Edit') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.store.edit', $shopProduct->id) . '" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-accent-600 text-white hover:bg-accent-700"><i class="fas fa-pen"></i></a>
 
                            <form class="d-inline" onsubmit="return submitResult();" method="post" action="' . route('admin.store.destroy', $shopProduct->id) . '">
                             ' . csrf_field() . '
                             ' . method_field('DELETE') . '
-                           <button data-content="' . __('Delete') . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="mr-1 btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                           <button data-content="' . __('Delete') . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-danger text-white hover:bg-danger-700"><i class="fas fa-trash"></i></button>
                        </form>
                 ';
             })

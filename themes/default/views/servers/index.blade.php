@@ -28,7 +28,7 @@
             </a>
             @if (Auth::user()->Servers->count() > 0 && !empty($phpmyadmin_url))
                 <a href="{{ $phpmyadmin_url }}" target="_blank"
-                    class="inline-flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-600 text-white font-semibold rounded-lg transition-all duration-200">
+                    class="inline-flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-accent-600 to-accent-500 hover:from-accent-500 hover:to-accent-600 text-white font-semibold rounded-lg transition-all duration-200">
                     <i class="fas fa-database"></i>
                     {{ __('Database') }}
                 </a>
@@ -152,7 +152,7 @@
                                 <div class="col-span-1 flex flex-col gap-2">
                                     <div class="flex gap-2">
                                         <a href="{{ $pterodactyl_url }}/server/{{ $server->identifier }}" target="_blank"
-                                            class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 text-xs shadow-sm hover:shadow-md"
+                                            class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-accent-600 hover:bg-accent-700 text-white font-medium rounded-lg transition-all duration-200 text-xs shadow-sm hover:shadow-md"
                                             data-tippy-content="{{ __('Manage Server') }}">
                                             <i class="fas fa-gamepad"></i>
                                             <span class="hidden sm:inline">{{ __('Manage') }}</span>

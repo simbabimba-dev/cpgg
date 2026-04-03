@@ -1,68 +1,52 @@
 @extends('layouts.main')
 
 @section('content')
-    <!-- CONTENT HEADER -->
-    <section class="content-header">
-        <div class="container-fluid">
-            <div class="mb-2 row">
-                <div class="col-sm-6">
-                    <h1>{{__('Ticket')}}</h1>
-                </div>
-                <div class="col-sm-6">
-                    <ol class="breadcrumb float-sm-right">
-                        <li class="breadcrumb-item"><a href="{{route('home')}}">{{__('Dashboard')}}</a></li>
-                        <li class="breadcrumb-item"><a class="text-muted"
-                                                       href="{{route('admin.ticket.index')}}">{{__('Ticket List')}}</a></li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-    </section>
-    <!-- END CONTENT HEADER -->
-
-    <!-- MAIN CONTENT -->
+    <div class="mb-6 flex flex-col justify-between gap-y-4 sm:flex-row sm:items-center">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">{{ __('Ticket') }}</h1>
+        <ol class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+            <li>
+                <a href="{{ route('home') }}" class="hover:text-accent-600 dark:hover:text-accent-400">{{ __('Dashboard') }}</a>
+            </li>
+            <li>/</li>
+            <li>
+                <a href="{{ route('admin.ticket.index') }}" class="text-gray-700 hover:text-accent-600 dark:text-gray-300 dark:hover:text-accent-400">{{ __('Ticket List') }}</a>
+            </li>
+        </ol>
+    </div>
     <section class="content">
-        <div class="container-fluid">
-
-            <div class="card">
-
-                <div class="card-header">
-                    <div class="d-flex justify-content-between">
-                        <h5 class="card-title"><i class="mr-2 fas fa-ticket-alt"></i>{{__('Ticket List')}}</h5>
-                    </div>
-                    <a href="{{route("admin.ticket.category.index")}}"><button class="float-right btn btn-primary">+ {{__("Add Category")}}</button></a>
+        <div class="w-full">
+            <div class="bg-white rounded-lg shadow-md overflow-hidden dark:bg-gray-800">
+                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center dark:border-gray-700">
+                    <h5 class="text-lg font-medium text-gray-800 dark:text-white">
+                        <i class="mr-2 fas fa-ticket-alt text-gray-500 dark:text-gray-400"></i>{{ __('Ticket List') }}
+                    </h5>
+                    <a href="{{ route("admin.ticket.category.index") }}" class="inline-flex items-center rounded-md bg-accent-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 dark:hover:bg-accent-500">
+                        <span class="mr-1">+</span> {{ __("Add Category") }}
+                    </a>
                 </div>
 
-
-
-                <div class="card-body table-responsive">
-
-                    <table id="datatable" class="table table-striped">
-                        <thead>
-                        <tr>
-                            <th>{{__('Category')}}</th>
-                            <th>{{__('Title')}}</th>
-                            <th>{{__('User')}}</th>
-                            <th>{{__('Priority')}}</th>
-                            <th>{{__('Status')}}</th>
-                            <th>{{__('Last Updated')}}</th>
-                            <th>{{__('Actions')}}</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        </tbody>
-                    </table>
-
+                <div class="p-6">
+                    <div class="overflow-x-auto">
+                        <table id="datatable" class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-700">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ __('Category') }}</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ __('Title') }}</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ __('User') }}</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ __('Priority') }}</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ __('Status') }}</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ __('Last Updated') }}</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ __('Actions') }}</th>
+                            </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-
-
-
         </div>
-        <!-- END CUSTOM CONTENT -->
-
-    </section>
-    <!-- END CONTENT -->
+        </section>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             $('#datatable').DataTable({
@@ -72,7 +56,7 @@
                 processing: true,
                 serverSide: true,
                 stateSave: true,
-                ajax: "{{route('admin.ticket.datatable')}}",
+                ajax: "{{ route('admin.ticket.datatable') }}",
                 order: [[ 4, "desc" ]],
                 columns: [
                     {data: 'category'},
@@ -89,6 +73,4 @@
             });
         });
     </script>
-
-
 @endsection

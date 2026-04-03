@@ -260,8 +260,8 @@
                     <div
                         class="px-6 py-4 border-b border-gray-200 dark:border-gray-700/50 bg-gradient-to-r from-transparent to-transparent hover:from-gray-50 dark:hover:from-gray-800/30 transition-colors">
                         <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                                <i class="fas fa-flag text-blue-600 dark:text-blue-400"></i>
+                            <div class="w-10 h-10 rounded-lg bg-accent-500/20 flex items-center justify-center">
+                                <i class="fas fa-flag text-accent-600 dark:text-accent-400"></i>
                             </div>
                             <h2 class="text-lg font-bold text-gray-900 dark:text-white">{{ __('Billing Priority') }}</h2>
                         </div>
@@ -274,8 +274,8 @@
                                     class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-widest mb-2">
                                     {{ __('Current Priority') }}</p>
                                 <div
-                                    class="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800/30">
-                                    <i class="fas fa-star text-blue-600 dark:text-blue-400 text-lg"></i>
+                                    class="flex items-center gap-3 p-4 bg-accent-50 dark:bg-accent-900/20 rounded-lg border border-accent-200 dark:border-accent-800/30">
+                                    <i class="fas fa-star text-accent-600 dark:text-accent-400 text-lg"></i>
                                     <div>
                                         <p class="font-semibold text-gray-900 dark:text-white">
                                             {{ $server->effective_billing_priority->label() }}</p>
@@ -308,8 +308,8 @@
                         <div
                             class="px-6 py-4 border-b border-gray-200 dark:border-gray-700/50 flex items-center justify-between bg-gradient-to-r from-gray-50 to-transparent dark:from-gray-800/50 dark:to-transparent">
                             <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                                    <i class="fas fa-arrow-up text-blue-600 dark:text-blue-400"></i>
+                                <div class="w-10 h-10 rounded-lg bg-accent-500/20 flex items-center justify-center">
+                                    <i class="fas fa-arrow-up text-accent-600 dark:text-accent-400"></i>
                                 </div>
                                 <h5 class="text-lg font-bold text-gray-900 dark:text-white">
                                     {{ __('Upgrade/Downgrade Server') }}</h5>
@@ -322,9 +322,9 @@
                         </div>
                         <div class="px-6 py-6 space-y-4">
                             <div
-                                class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800/30">
+                                class="p-4 bg-accent-50 dark:bg-accent-800/20 rounded-lg border border-accent-200 dark:border-accent-800/30">
                                 <p class="text-sm text-gray-700 dark:text-gray-300">
-                                    <strong class="text-blue-700 dark:text-blue-400">{{ __('Current Product') }}:</strong>
+                                    <strong class="text-accent-700 dark:text-accent-400">{{ __('Current Product') }}:</strong>
                                     <span class="ml-1">{{ $server->product->name }}</span>
                                 </p>
                             </div>
@@ -399,10 +399,10 @@
             <div class="w-full max-w-md mx-auto" @click.stop>
                 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
                     <div
-                        class="px-6 py-4 border-b border-gray-200 dark:border-gray-700/50 flex items-center justify-between bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-900/20 dark:to-transparent">
+                        class="px-6 py-4 border-b border-gray-200 dark:border-gray-700/50 flex items-center justify-between bg-gradient-to-r from-accent-50 to-transparent dark:from-accent-800/20 dark:to-transparent">
                         <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                                <i class="fas fa-star text-blue-600 dark:text-blue-400"></i>
+                            <div class="w-10 h-10 rounded-lg bg-accent-500/20 flex items-center justify-center">
+                                <i class="fas fa-star text-accent-600 dark:text-accent-400"></i>
                             </div>
                             <h5 class="text-lg font-bold text-gray-900 dark:text-white">
                                 {{ __('Update Billing Priority') }}</h5>

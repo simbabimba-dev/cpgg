@@ -57,7 +57,7 @@
                         </p>
                     </div>
                     <div
-                        class="w-12 h-12 rounded-xl flex items-center justify-center bg-accent-blue group-hover:scale-110 transition-transform duration-300 shadow-xl shadow-blue-500/25">
+                        class="w-12 h-12 rounded-xl flex items-center justify-center bg-accent-600 group-hover:scale-110 transition-transform duration-300 shadow-xl shadow-accent-500/25">
                         <i class="fas fa-server text-white text-lg"></i>
                     </div>
                 </div>
@@ -338,8 +338,8 @@
                                             $iconClass = 'text-emerald-400';
                                             $icon = 'fa-money-bill';
                                         } elseif (str_starts_with($log->description, 'updated')) {
-                                            $bgClass = 'bg-blue-500/10';
-                                            $iconClass = 'text-blue-400';
+                                            $bgClass = 'bg-accent-500/10';
+                                            $iconClass = 'text-accent-400';
                                             $icon = 'fa-pen';
                                         }
                                     @endphp

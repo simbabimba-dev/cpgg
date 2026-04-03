@@ -1,257 +1,137 @@
 @extends('layouts.main')
 
 @section('content')
-    <!-- CONTENT HEADER -->
-    <section class="content-header">
-        <div class="container-fluid">
-            <div class="mb-2 row">
-                <div class="col-sm-6">
-                    <h1>{{__('Products')}}</h1>
-                </div>
-                <div class="col-sm-6">
-                    <ol class="breadcrumb float-sm-right">
-                        <li class="breadcrumb-item"><a href="{{ route('home') }}">{{__('Dashboard')}}</a></li>
-                        <li class="breadcrumb-item"><a href="{{ route('admin.users.index') }}">{{__('Products')}}</a></li>
-                        <li class="breadcrumb-item"><a class="text-muted"
-                                href="{{ route('admin.products.show', $product->id) }}">{{__('Show')}}</a>
-                        </li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-    </section>
-    <!-- END CONTENT HEADER -->
-
-    <!-- MAIN CONTENT -->
+    <div class="mb-6 flex flex-col justify-between gap-y-4 sm:flex-row sm:items-center">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">{{ __('Products') }}</h1>
+        <ol class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+            <li>
+                <a href="{{ route('home') }}" class="hover:text-accent-500 dark:hover:text-accent-400">{{ __('Dashboard') }}</a>
+            </li>
+            <li>/</li>
+            <li>
+                <a href="{{ route('admin.users.index') }}" class="hover:text-accent-500 dark:hover:text-accent-400">{{ __('Products') }}</a>
+            </li>
+            <li>/</li>
+            <li>
+                <span class="text-gray-700 dark:text-gray-300">{{ __('Show') }}</span>
+            </li>
+        </ol>
+    </div>
     <section class="content">
-        <div class="container-fluid">
-
-            <div class="card">
-                <div class="card-header d-flex justify-content-between">
-                    <h5 class="card-title"><i class="mr-2 fas fa-sliders-h"></i>{{__('Product')}}</h5>
-                    <div class="ml-auto">
-                        <a data-content="Edit" data-trigger="hover" data-toggle="tooltip"
-                            href="{{ route('admin.products.edit', $product->id) }}" class="mr-1 btn btn-sm btn-info"><i
-                                class="fas fa-pen"></i></a>
-                        <form class="d-inline" onsubmit="return submitResult();" method="post"
-                            action="{{ route('admin.products.destroy', $product->id) }}">
+        <div class="w-full">
+            <div class="mb-6 overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800">
+                <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+                    <h5 class="text-lg font-medium text-gray-800 dark:text-white">
+                        <i class="mr-2 fas fa-sliders-h text-gray-500 dark:text-gray-400"></i>{{ __('Product') }}
+                    </h5>
+                    <div class="flex space-x-2">
+                        <a href="{{ route('admin.products.edit', $product->id) }}" class="rounded bg-accent-500 px-2 py-1 text-sm text-white hover:bg-accent-600" data-toggle="tooltip" title="Edit">
+                            <i class="fas fa-pen"></i>
+                        </a>
+                        <form class="inline-block" onsubmit="return submitResult();" method="post" action="{{ route('admin.products.destroy', $product->id) }}">
                             {{ csrf_field() }}
                             {{ method_field('DELETE') }}
-                            <button data-content="Delete" data-trigger="hover" data-toggle="tooltip"
-                                class="mr-1 btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                            <button class="rounded bg-red-500 px-2 py-1 text-sm text-white hover:bg-red-600" data-toggle="tooltip" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </form>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="row">
-
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('ID')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->id }}
-                                    </span>
-                                </div>
-                            </div>
+                <div class="p-6">
+                    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('ID') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">{{ $product->id }}</span>
                         </div>
 
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Name')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->name }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Name') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">{{ $product->name }}</span>
                         </div>
 
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Price')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        <i class="mr-1 fas fa-coins"></i>{{ Currency::formatForDisplay($product->price) }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Price') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">
+                                <i class="mr-1 fas fa-coins"></i>{{ Currency::formatForDisplay($product->price) }}
+                            </span>
                         </div>
 
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Minimum')}} {{ $credits_display_name }}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        <i class="mr-1 fas fa-coins"></i>{{ !$product->minimum_credits ? Currency::formatForDisplay($minimum_credits) : $product->display_minimum_credits }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Minimum') }} {{ $credits_display_name }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">
+                                <i class="mr-1 fas fa-coins"></i>{{ !$product->minimum_credits ? Currency::formatForDisplay($minimum_credits) : $product->display_minimum_credits }}
+                            </span>
                         </div>
 
-
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Memory')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->memory }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Memory') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">{{ $product->memory }}</span>
                         </div>
 
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('CPU')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->cpu }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('CPU') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">{{ $product->cpu }}</span>
                         </div>
 
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Swap')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->swap }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Swap') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">{{ $product->swap }}</span>
                         </div>
 
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Disk')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->disk }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Disk') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">{{ $product->disk }}</span>
                         </div>
 
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('IO')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->io }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('IO') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">{{ $product->io }}</span>
                         </div>
 
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Databases')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->databases }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Databases') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">{{ $product->databases }}</span>
                         </div>
 
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Allocations')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->allocations }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Allocations') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">{{ $product->allocations }}</span>
                         </div>
 
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Created at')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->created_at ? $product->created_at->diffForHumans() : '' }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Created at') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">
+                                {{ $product->created_at ? $product->created_at->diffForHumans() : '' }}
+                            </span>
                         </div>
 
-
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Description')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span class="d-block text-truncate">
-                                        {{ $product->description }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Description') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">{{ $product->description }}</span>
                         </div>
 
-
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <div class="col-lg-4">
-                                    <label>{{__('Updated at')}}</label>
-                                </div>
-                                <div class="col-lg-8">
-                                    <span style="max-width: 250px;" class="d-inline-block text-truncate">
-                                        {{ $product->updated_at ? $product->updated_at->diffForHumans() : '' }}
-                                    </span>
-                                </div>
-                            </div>
+                        <div class="flex justify-between border-b border-gray-100 pb-2 dark:border-gray-700">
+                            <span class="font-semibold text-gray-700 dark:text-gray-300">{{ __('Updated at') }}</span>
+                            <span class="truncate text-gray-600 dark:text-gray-400" style="max-width: 250px;">
+                                {{ $product->updated_at ? $product->updated_at->diffForHumans() : '' }}
+                            </span>
                         </div>
 
                     </div>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title"><i class="mr-2 fas fa-server"></i>{{__('Servers')}}</h5>
+            <div class="overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800">
+                <div class="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+                    <h5 class="text-lg font-medium text-gray-800 dark:text-white">
+                        <i class="mr-2 fas fa-server text-gray-500 dark:text-gray-400"></i>{{ __('Servers') }}
+                    </h5>
                 </div>
-                <div class="card-body table-responsive">
-
+                <div class="p-6">
                     @include('admin.servers.table' , ['filter' => '?product=' . $product->id])
-
                 </div>
             </div>
-
-
-        </div>
-        <!-- END CUSTOM CONTENT -->
         </div>
     </section>
-    <!-- END CONTENT -->
-
-
-
-@endsection
+    @endsection

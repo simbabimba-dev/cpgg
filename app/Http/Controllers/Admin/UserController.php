@@ -438,23 +438,23 @@ class UserController extends Controller
                 return $user->discordUser ? $user->discordUser->id : '';
             })
             ->addColumn('actions', function (User $user) {
-                $suspendColor = $user->isSuspended() ? 'btn-success' : 'btn-warning';
+                $suspendColor = $user->isSuspended() ? 'bg-success hover:bg-success-700' : 'bg-warning hover:bg-warning-700';
                 $suspendIcon = $user->isSuspended() ? 'fa-play-circle' : 'fa-pause-circle';
                 $suspendText = $user->isSuspended() ? __('Unsuspend') : __('Suspend');
 
                 return '
-                <a data-content="' . __('Login as User') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.users.loginas', $user->id) . '" class="mr-1 btn btn-sm btn-primary"><i class="fas fa-sign-in-alt"></i></a>
-                <a data-content="' . __('Verify') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.users.verifyEmail', $user->id) . '" class="mr-1 btn btn-sm btn-secondary"><i class="fas fa-envelope"></i></a>
-                <a data-content="' . __('Show') . '" data-toggle="popover" data-trigger="hover" data-placement="top"  href="' . route('admin.users.show', $user->id) . '" class="mr-1 text-white btn btn-sm btn-warning"><i class="fas fa-eye"></i></a>
-                <a data-content="' . __('Edit') . '" data-toggle="popover" data-trigger="hover" data-placement="top"  href="' . route('admin.users.edit', $user->id) . '" class="mr-1 btn btn-sm btn-info"><i class="fas fa-pen"></i></a>
+                <a data-content="' . __('Login as User') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.users.loginas', $user->id) . '" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-accent-600 text-white hover:bg-accent-700"><i class="fas fa-sign-in-alt"></i></a>
+                <a data-content="' . __('Verify') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.users.verifyEmail', $user->id) . '" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-accent-50 text-accent-700 hover:bg-accent-100"><i class="fas fa-envelope"></i></a>
+                <a data-content="' . __('Show') . '" data-toggle="popover" data-trigger="hover" data-placement="top"  href="' . route('admin.users.show', $user->id) . '" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-warning text-white hover:bg-warning-700"><i class="fas fa-eye"></i></a>
+                <a data-content="' . __('Edit') . '" data-toggle="popover" data-trigger="hover" data-placement="top"  href="' . route('admin.users.edit', $user->id) . '" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-accent-600 text-white hover:bg-accent-700"><i class="fas fa-pen"></i></a>
                 <form class="d-inline" method="post" action="' . route('admin.users.togglesuspend', $user->id) . '">
                              ' . csrf_field() . '
-                            <button data-content="' . $suspendText . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="btn btn-sm ' . $suspendColor . ' text-white mr-1"><i class="far ' . $suspendIcon . '"></i></button>
+                            <button data-content="' . $suspendText . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs text-white ' . $suspendColor . '"><i class="far ' . $suspendIcon . '"></i></button>
                           </form>
                 <form class="d-inline" onsubmit="return submitResult();" method="post" action="' . route('admin.users.destroy', $user->id) . '">
                              ' . csrf_field() . '
                              ' . method_field('DELETE') . '
-                            <button data-content="' . __('Delete') . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="mr-1 btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                            <button data-content="' . __('Delete') . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="inline-flex items-center justify-center mr-1 px-2 py-1 rounded text-xs bg-danger text-white hover:bg-danger-700"><i class="fas fa-trash"></i></button>
                         </form>
                 ';
             })
