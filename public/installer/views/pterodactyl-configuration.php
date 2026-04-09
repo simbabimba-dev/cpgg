@@ -21,6 +21,14 @@
             </div>
             <div class="form-group">
                 <div class="flex flex-col mb-3">
+                    <label for="display_url">Panel Display URL (optional)</label>
+                    <input id="display_url" name="display_url" type="text" placeholder="https://panel.example.com" class="px-2 py-1 bg-[#1D2125] border-2 focus:border-sky-500 box-border rounded-md border-transparent outline-none">
+                    <span class="text-neutral-400">
+                        Leave empty to use the API panel URL. This URL is shown in UI links to your Pterodactyl panel.</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="flex flex-col mb-3">
                     <label for="key">Application API Key</label>
                     <input id="key" name="key" type="text" required value="" class="px-2 py-1 bg-[#1D2125] border-2 focus:border-sky-500 box-border rounded-md border-transparent outline-none">
                     <span class="text-neutral-400">

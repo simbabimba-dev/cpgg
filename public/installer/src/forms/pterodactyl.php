@@ -3,6 +3,7 @@ if (isset($_POST['checkPtero'])) {
     wh_log('Checking Pterodactyl Settings', 'debug');
 
     $url = trim((string) ($_POST['url'] ?? ''));
+    $displayUrl = trim((string) ($_POST['display_url'] ?? ''));
     $key = trim((string) ($_POST['key'] ?? ''));
     $clientkey = trim((string) ($_POST['clientkey'] ?? ''));
 
@@ -19,6 +20,21 @@ if (isset($_POST['checkPtero'])) {
     }
 
     $url = $parsedUrl['scheme'] . '://' . $parsedUrl['host'];
+
+    if ($displayUrl !== '') {
+        $parsedDisplayUrl = parse_url($displayUrl);
+        if (!isset($parsedDisplayUrl['scheme']) || !in_array(strtolower((string) $parsedDisplayUrl['scheme']), ['http', 'https'], true)) {
+            send_error_message("Please set a valid Panel Display URL Scheme like 'https://'!");
+            exit();
+        }
+
+        if (!isset($parsedDisplayUrl['host'])) {
+            send_error_message("Please set a valid Panel Display URL host like 'https://panel.example.com'!");
+            exit();
+        }
+
+        $displayUrl = $parsedDisplayUrl['scheme'] . '://' . $parsedDisplayUrl['host'];
+    }
 
     $callpteroURL = $url . '/api/client/account';
     $call = curl_init();
@@ -78,7 +94,9 @@ if (isset($_POST['checkPtero'])) {
 
     try {
         run_console(['php', 'artisan', 'settings:set', 'PterodactylSettings', 'panel_url', $url], null, null, null, false);
-        run_console(['php', 'artisan', 'settings:set', 'PterodactylSettings', 'panel_display_url', $url], null, null, null, false);
+        if ($displayUrl !== '') {
+            run_console(['php', 'artisan', 'settings:set', 'PterodactylSettings', 'panel_display_url', $displayUrl], null, null, null, false);
+        }
         run_console(['php', 'artisan', 'settings:set', 'PterodactylSettings', 'admin_token', $key], null, null, null, false);
         run_console(['php', 'artisan', 'settings:set', 'PterodactylSettings', 'user_token', $clientkey], null, null, null, false);
         wh_log('Database updated with pterodactyl Settings.', 'debug');
