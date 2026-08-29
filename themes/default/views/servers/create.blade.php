@@ -171,6 +171,20 @@
                                 </select>
                             </div>
 
+                            <div class="form-group" x-show="fetchedProducts && products.length > 0">
+                                <label for="sort-products">{{ __('Sort products by') }}</label>
+                                <select id="sort-products" class="custom-select" x-model="sortBy"
+                                    @change="sortProducts()">
+                                    <option value="price">{{ __('Price') }}</option>
+                                    <option value="cpu">{{ __('CPU') }}</option>
+                                    <option value="memory">{{ __('Memory') }}</option>
+                                    <option value="disk">{{ __('Disk') }}</option>
+                                    <option value="backups">{{ __('Backups') }}</option>
+                                    <option value="databases">{{ __('MySQL Databases') }}</option>
+                                    <option value="allocations">{{ __('Additional allocations (ports)') }}</option>
+                                </select>
+                            </div>
+
                             <template
                                 x-if="selectedProduct != null && selectedProduct != '' && locations.length == 0 && !loading">
                                 <div class="p-2 m-2 alert alert-danger">
@@ -356,6 +370,7 @@
                 selectedLocation: null,
                 selectedProduct: null,
                 locationDescription: null,
+                sortBy: 'price',
 
                 //selected objects based on input
                 selectedNestObject: {},
@@ -467,9 +482,7 @@
 
                     this.fetchedProducts = true;
 
-                    // TODO: Sortable by user chosen property (cpu, ram, disk...)
-                    this.products = response.data.sort((p1, p2) => parseInt(p1.price, 10) > parseInt(p2.price, 10) &&
-                        1 || -1)
+                    this.products = response.data;
 
                     //divide cpu by 100 for each product
                     this.products.forEach(product => {
@@ -483,10 +496,30 @@
                             minVal;
                     })
 
+                    this.sortProducts();
+
                     this.locationDescription = this.locations.find(location => location.id == this.selectedLocation)
                         .description ?? null;
                     this.loading = false;
                     this.updateSelectedObjects()
+                },
+
+                /**
+                 * @description sort the products by the user chosen property
+                 * @note called whenever the sort dropdown changes or products are fetched
+                 * @see sortBy
+                 */
+                sortProducts() {
+                    const sortableProperties = ['price', 'cpu', 'memory', 'disk', 'backups', 'databases', 'allocations'];
+
+                    // Fall back to price if the chosen property is not sortable.
+                    const property = sortableProperties.includes(this.sortBy) ? this.sortBy : 'price';
+
+                    this.products.sort((p1, p2) => {
+                        const a = parseFloat(p1[property]) || 0;
+                        const b = parseFloat(p2[property]) || 0;
+                        return a - b;
+                    });
                 },
 
 

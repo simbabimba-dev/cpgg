@@ -93,7 +93,7 @@ class PaymentController extends Controller
             'taxvalue' => $shopProduct->getTaxValue(),
             'taxpercent' => $shopProduct->getTaxPercent(),
             'total' => $shopProduct->getTotalPrice(),
-            'paymentGateways'   => $paymentGateways,
+            'paymentGateways' => $paymentGateways,
             'productIsFree' => $price <= 0,
             'credits_display_name' => $general_settings->credits_display_name,
             'isCouponsEnabled' => $coupon_settings->enabled,
@@ -281,12 +281,26 @@ class PaymentController extends Controller
                 }
 
                 if ($payment->status !== PaymentStatus::PAID && $payment->status !== PaymentStatus::CANCELED) {
-                    $actions .= '<button type="button" class="mr-1 btn btn-sm btn-success" data-toggle="popover" data-trigger="hover" data-placement="top" data-content="' . __('Force Confirm') . '" onclick="confirmStatusUpdate(\'' . route('admin.payments.statusUpdate', $payment->id) . '\')"><i class="fas fa-check"></i></button>';
+                    $actions .= '<button type="button" class="mr-1 btn btn-sm btn-success" data-toggle="popover" data-trigger="hover" data-placement="top" data-content="' . __('Force Confirm') . '" onclick="confirmStatusUpdate(\'' . route('admin.payments.statusUpdate', $payment->id) . '\', \'paid\')"><i class="fas fa-check"></i></button>';
 
                     $extensionClass = ExtensionHelper::getExtensionClass($payment->payment_method);
                     if ($extensionClass && class_exists($extensionClass) && $extensionClass::supportsRecheck()) {
                         $actions .= '<form method="POST" action="' . route('admin.payments.recheck', $payment->id) . '" style="display:inline-block;">' . csrf_field() . '<button type="submit" class="mr-1 btn btn-sm btn-primary" data-toggle="popover" data-trigger="hover" data-placement="top" data-content="' . __('Recheck') . '"><i class="fas fa-sync"></i></button></form>';
                     }
+                }
+
+                // Status switcher: allow the admin to move the payment to any other status.
+                $availableStatuses = array_filter(PaymentStatus::cases(), fn(PaymentStatus $s) => $s !== $payment->status);
+                if (count($availableStatuses) > 0) {
+                    $options = '';
+                    foreach ($availableStatuses as $status) {
+                        $options .= '<option value="' . $status->value . '">' . ucfirst($status->value) . '</option>';
+                    }
+                    $actions .= '<form method="POST" action="' . route('admin.payments.statusUpdate', $payment->id) . '" style="display:inline-block;">' . csrf_field()
+                        . '<select name="status" class="form-control form-control-sm d-inline-block w-auto" onchange="this.form.submit()">'
+                        . '<option value="" disabled selected>' . __('Set status') . '</option>'
+                        . $options
+                        . '</select></form>';
                 }
 
                 return $actions;
@@ -295,33 +309,43 @@ class PaymentController extends Controller
             ->make(true);
     }
 
-    public function statusUpdate(Payment $payment)
+    public function statusUpdate(Payment $payment, Request $request)
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
-        // TODO: In the future, we could add a status parameter to allow switching to any status (canceled, processing, etc.)
-        if ($payment->status === PaymentStatus::PAID) {
-            return redirect()->route('admin.payments.index')->with('error', __('Payment is already paid.'));
+        // Determine the target status. Defaults to PAID for backward compatibility
+        // with the "Force Confirm" action; otherwise it is taken from the request.
+        $status = PaymentStatus::tryFrom($request->input('status', ''));
+        $status ??= PaymentStatus::PAID;
+
+        if ($payment->status === $status) {
+            return redirect()->route('admin.payments.index')->with('error', __('Payment is already :status.', ['status' => $status->value]));
         }
 
-        $payment->status = PaymentStatus::PAID;
+        $wasPaid = $payment->status === PaymentStatus::PAID;
+
+        $payment->status = $status;
         $payment->save();
 
         $user = User::findOrFail($payment->user_id);
-        $shopProduct = ShopProduct::findOrFail($payment->shop_item_product_id);
 
-        if ($payment->coupon_code) {
-            event(new CouponUsedEvent($payment->coupon_code, $user));
+        // Only trigger payment-related actions when the payment transitions to PAID.
+        if ($status === PaymentStatus::PAID && !$wasPaid) {
+            $shopProduct = ShopProduct::findOrFail($payment->shop_item_product_id);
+
+            if ($payment->coupon_code) {
+                event(new CouponUsedEvent($payment->coupon_code, $user));
+            }
+
+            try {
+                $user->notify(new \App\Notifications\ConfirmPaymentNotification($payment));
+            } catch (Exception $e) {
+                Log::error('Force confirm notification failed: ' . $e->getMessage());
+            }
+
+            event(new PaymentEvent($user, $payment, $shopProduct));
+            event(new UserUpdateCreditsEvent($user));
         }
-
-        try {
-            $user->notify(new \App\Notifications\ConfirmPaymentNotification($payment));
-        } catch (Exception $e) {
-            Log::error('Force confirm notification failed: ' . $e->getMessage());
-        }
-
-        event(new PaymentEvent($user, $payment, $shopProduct));
-        event(new UserUpdateCreditsEvent($user));
 
         return redirect()->route('admin.payments.index')->with('success', __('Payment status updated successfully.'));
     }

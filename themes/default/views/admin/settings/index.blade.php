@@ -300,30 +300,27 @@
                                                     </div>
                                                 @endforeach
 
-                                                <!-- TODO: Display this only on the General tab
+                                                @if ($category === 'general')
+                                                    <div class="row">
+                                                        <div class="col-4 d-flex align-items-center">
+                                                            <label for="recaptcha_preview">{{ __('ReCAPTCHA Preview') }}</label>
+                                                        </div>
 
-                                                                                                                                                                    <div class="row">
-                                                                                                                                                                        <div class="col-4 d-flex align-items-center">
-                                                                                                                                                                            <label for="recaptcha_preview">{{ __('ReCAPTCHA Preview') }}</label>
-                                                                                                                                                                        </div>
-
-                                                                                                                                                                        <div class="col-8">
-
-                                                                                                                                                                                <div class="w-100">
-                                                                                                                                                                        <div class="mb-3 input-group">
-                                                                                                                                                                            @captchaScripts
-                                                                                                                                                                            <x-captcha />
-                                                                                                                                                                        @error('captcha')
-            <span class="text-danger" role="alert">
-                                                                                                                                                                                                                                                                <small><strong>{{ $message }}</strong></small>
-                                                                                                                                                                                                                                                                    </span>
-        @enderror
-                                                                                                                                                                        </div>
-                                                                                                                                                                                </div>
-                                                                                                                                                                        </div>
-                                                                                                                                                                    </div>
-                                                                                                                                                                       -->
-
+                                                        <div class="col-8">
+                                                            <div class="w-100">
+                                                                <div class="mb-3 input-group">
+                                                                    @captchaScripts
+                                                                    <x-captcha />
+                                                                    @error('captcha')
+                                                                        <span class="text-danger" role="alert">
+                                                                            <small><strong>{{ $message }}</strong></small>
+                                                                        </span>
+                                                                    @enderror
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                @endif
 
                                                 <div class="row">
                                                     <div class="col-12 d-flex align-items-center justify-content-end">
