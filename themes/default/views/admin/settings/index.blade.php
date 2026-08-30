@@ -43,7 +43,7 @@
                 <div class="card-body">
                     <!-- Sidebar Menu -->
                     <div class="row d-flex">
-                        <div class="p-0 col-md-2 col-12">
+                        <div class="p-0 col-12 col-md-auto settings-menu">
                             <nav class="mt-1">
                                 <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="tablist"
                                     data-accordion="false">
@@ -78,7 +78,7 @@
                                 </ul>
 
 
-                                <button class="mb-2 btn btn-outline-secondary mb-md-0" type="button" data-toggle="collapse"
+                                <button class="btn btn-outline-secondary settings-extensions-toggle" type="button" data-toggle="collapse"
                                     data-target="#collapseExtensions" aria-expanded="false"
                                     aria-controls="collapseExtensions">
                                     {{ __('Extension Settings') }}
@@ -110,7 +110,7 @@
                         </div>
                         <!-- /.sidebar-menu -->
                         <!-- Content in $settings -->
-                        <div class="p-0 col-md-10 col-12">
+                        <div class="p-0 col-12 col-md settings-content">
                             <div class="tab-content">
                                 <div class="container tab-pane fade" id="icons" role="tabpanel">
 
@@ -197,10 +197,16 @@
                                                 <input type="hidden" name="settings_class"
                                                     value="{{ $options['settings_class'] }}">
                                                 <input type="hidden" name="category" value="{{ $category }}">
-                                                @foreach ($options as $key => $value)
-                                                    @if ($key == 'category_icon' || $key == 'settings_class' || $key == 'position')
-                                                        @continue
+                                                @foreach ($options['sections'] as $section)
+                                                    @if ($section['label'])
+                                                        <div class="mt-3 mb-3 pb-2 border-bottom d-flex flex-column flex-md-row align-items-md-center justify-content-md-between">
+                                                            <h6 class="mb-1 mb-md-0 font-weight-bold">{{ __($section['label']) }}</h6>
+                                                            @if ($section['description'])
+                                                                <small class="text-muted">{{ __($section['description']) }}</small>
+                                                            @endif
+                                                        </div>
                                                     @endif
+                                                    @foreach ($section['options'] as $key => $value)
                                                     <div class="mb-3 row">
                                                         <div class="col-md-4 col-12 d-flex align-items-center">
                                                           <label class="w-100 d-inline-flex justify-content-between align-items-center" for="{{ $key }}">
@@ -298,6 +304,7 @@
 
                                                         </div>
                                                     </div>
+                                                    @endforeach
                                                 @endforeach
 
                                                 @if ($category === 'general')
@@ -351,16 +358,81 @@
     </section>
     <!-- END CONTENT -->
 
-    <script>
-        const tabPaneHash = window.location.hash;
-        if (tabPaneHash) {
-            $('.nav-item a[href="' + tabPaneHash + '"]').tab('show');
+    <style>
+        .settings-menu .nav-sidebar .nav-link {
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+            overflow: hidden;
         }
 
-        $('.nav-pills a').click(function(e) {
-            $(this).tab('show');
-            window.location.hash = this.hash;
+        .settings-menu .settings-extensions-toggle {
+            margin-bottom: 0.2rem;
+        }
+
+        .settings-menu .nav-sidebar .nav-link .nav-icon {
+            flex: 0 0 auto;
+        }
+
+        .settings-menu .nav-sidebar .nav-link p {
+            flex: 0 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            width: auto !important;
+            margin-left: 0 !important;
+            visibility: visible !important;
+            animation: none !important;
+        }
+
+        .settings-menu .nav-sidebar .nav-header {
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        @media (min-width: 768px) {
+            .settings-menu {
+                max-width: 240px;
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            .settings-menu .nav-sidebar {
+                flex-direction: row;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                overflow-y: hidden;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+    </style>
+
+    <script>
+        function showSettingsTab(tabLink) {
+            $('.settings-menu .nav-link').removeClass('active');
+            $('.tab-content .tab-pane').removeClass('active show');
+            $(tabLink).addClass('active');
+            $($(tabLink).attr('href')).addClass('active show');
+        }
+
+        $('.settings-menu a[data-toggle="pill"]').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            showSettingsTab(this);
+            history.replaceState(null, '', this.hash);
         });
+
+        const tabPaneHash = window.location.hash;
+        if (tabPaneHash) {
+            const tabLink = $('.settings-menu a[href="' + tabPaneHash + '"]');
+            if (tabLink.length) {
+                showSettingsTab(tabLink);
+                if (tabLink.closest('#collapseExtensions').length) {
+                    $('#collapseExtensions').collapse('show');
+                }
+            }
+        }
 
         document.addEventListener('DOMContentLoaded', (event) => {
             $('.custom-select').select2({

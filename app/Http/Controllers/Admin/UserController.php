@@ -6,6 +6,7 @@ use App\Events\UserUpdateCreditsEvent;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Notifications\DynamicNotification;
+use App\Services\NotificationService;
 use App\Settings\LocaleSettings;
 use App\Settings\PterodactylSettings;
 use App\Classes\PterodactylClient;
@@ -54,7 +55,7 @@ class UserController extends Controller
 
     private $pterodactyl;
 
-    public function __construct(PterodactylSettings $ptero_settings)
+    public function __construct(PterodactylSettings $ptero_settings, private NotificationService $notificationService)
     {
         $this->pterodactyl = new PterodactylClient($ptero_settings);
     }
@@ -439,10 +440,7 @@ class UserController extends Controller
         $mail = null;
         $database = null;
         if (in_array('database', $data['via'])) {
-            $database = [
-                'title' => $data['title'],
-                'content' => $data['content'],
-            ];
+            $database = $this->notificationService->buildDatabaseNotification($data['title'], $data['content']);
         }
         if (in_array('mail', $data['via'])) {
             $mail = (new MailMessage)
@@ -555,11 +553,13 @@ class UserController extends Controller
                              ' . csrf_field() . '
                             <button data-content="' . $suspendText . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="btn btn-sm ' . $suspendColor . ' text-white mr-1"><i class="fas ' . $suspendIcon . '"></i></button>
                           </form>
-                <form class="d-inline" onsubmit="return submitResult();" method="post" action="' . route('admin.users.destroy', $user->id) . '">
-                             ' . csrf_field() . '
-                             ' . method_field('DELETE') . '
-                            <button data-content="' . __('Delete') . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="mr-1 btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                        </form>
+                <form class="d-inline" onsubmit="return submitResult(this);" method="post" action="' . route('admin.users.destroy', $user->id) . '">
+                    ' . csrf_field() . '
+                    ' . method_field('DELETE') . '
+                    <button data-content="' . __('Delete') . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="mr-1 btn btn-sm btn-danger">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
                 ';
             })
             ->editColumn('role', function (User $user) {

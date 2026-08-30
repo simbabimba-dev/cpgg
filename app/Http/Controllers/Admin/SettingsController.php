@@ -5,6 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Facades\Currency;
 use App\Helpers\ExtensionHelper;
 use App\Http\Controllers\Controller;
+use App\Classes\HtmlSanitizer;
+use App\Settings\GeneralSettings;
+use App\Settings\TermsSettings;
+use App\Settings\TicketSettings;
+use App\Settings\WebsiteSettings;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
@@ -79,6 +84,10 @@ class SettingsController extends Controller
 
             // collect all option input data
             $optionsData = [];
+            $sectionDefinitions = $optionInputData['sections'] ?? [];
+            $categoryName = str_replace('Settings', '', class_basename($className));
+            $categoryDescription = $optionInputData['category_description'] ?? null;
+
             foreach ($options as $key => $value) {
                 $optionsData[$key] = [
                     'value' => $value,
@@ -86,7 +95,8 @@ class SettingsController extends Controller
                     'type' => $optionInputData[$key]['type'] ?? 'string',
                     'description' => $optionInputData[$key]['description'] ?? '',
                     'options' => $optionInputData[$key]['options'] ?? [],
-                    'identifier' => $optionInputData[$key]['identifier'] ?? 'option'
+                    'identifier' => $optionInputData[$key]['identifier'] ?? 'option',
+                    'section' => $optionInputData[$key]['section'] ?? null,
                 ];
 
                 if($optionInputData[$key]['type'] === 'number') {
@@ -97,6 +107,10 @@ class SettingsController extends Controller
                     }
                 }
             }
+
+            // Group options into named sections so the view renders each
+            // section header exactly once.
+            $optionsData = $this->groupOptionsIntoSections($optionsData, $sectionDefinitions, $categoryName, $categoryDescription);
 
             // collect category icon if available
             if (isset($optionInputData['category_icon'])) {
@@ -111,7 +125,7 @@ class SettingsController extends Controller
 
             $optionsData['settings_class'] = $className;
 
-            $settings[str_replace('Settings', '', class_basename($className))] = $optionsData;
+            $settings[$categoryName] = $optionsData;
         }
 
         $settings = $settings->sortBy('position');
@@ -141,6 +155,68 @@ class SettingsController extends Controller
     }
 
     /**
+     * Group option fields into sections.
+     *
+     * Each option can declare the section it belongs to via the "section" key.
+     * Section metadata (label + description) is defined once under the
+     * "sections" key of getOptionInputData(). Sections are rendered in the
+     * order they are first referenced by an option, followed by any declared
+     * sections that were not used. Options without a section are placed in a
+     * leading section titled with the page name, so every settings page is
+     * rendered uniformly with a header.
+     *
+     * @param array<string, array<string, mixed>> $optionsData
+     * @param array<string, array<string, string>> $sectionDefinitions
+     * @param string $categoryName Display name of the settings page.
+     * @param string|null $categoryDescription Description for the default section.
+     * @return array<string, mixed>
+     */
+    private function groupOptionsIntoSections(array $optionsData, array $sectionDefinitions, string $categoryName, ?string $categoryDescription): array
+    {
+        $sections = [];
+        $ungrouped = [];
+
+        foreach ($optionsData as $key => $optionData) {
+            $sectionKey = $optionData['section'];
+            unset($optionData['section']);
+
+            if ($sectionKey === null) {
+                $ungrouped[$key] = $optionData;
+                continue;
+            }
+
+            $sections[$sectionKey]['options'][$key] = $optionData;
+            if (!isset($sections[$sectionKey]['label'])) {
+                $sections[$sectionKey]['label'] = $sectionDefinitions[$sectionKey]['label'] ?? ucwords(str_replace('_', ' ', $sectionKey));
+                $sections[$sectionKey]['description'] = $sectionDefinitions[$sectionKey]['description'] ?? '';
+            }
+        }
+
+        // Include declared sections in definition order, even when empty.
+        foreach ($sectionDefinitions as $sectionKey => $definition) {
+            if (!isset($sections[$sectionKey])) {
+                $sections[$sectionKey] = [
+                    'label' => $definition['label'] ?? ucwords(str_replace('_', ' ', $sectionKey)),
+                    'description' => $definition['description'] ?? '',
+                    'options' => [],
+                ];
+            }
+        }
+
+        $grouped = ['sections' => $sections];
+
+        if (!empty($ungrouped)) {
+            array_unshift($grouped['sections'], [
+                'label' => $categoryName,
+                'description' => $categoryDescription,
+                'options' => $ungrouped,
+            ]);
+        }
+
+        return $grouped;
+    }
+
+    /**
      * Update the specified resource in storage.
      *
      */
@@ -159,6 +235,8 @@ class SettingsController extends Controller
             abort(400, 'Invalid settings class.');
         }
 
+        $redirectCategory = str_replace('Settings', '', class_basename($resolvedSettingsClass));
+
         $this->checkPermission("settings." . $category . ".write");
 
         if (method_exists($resolvedSettingsClass, 'getValidations')) {
@@ -170,7 +248,7 @@ class SettingsController extends Controller
 
         $validator = Validator::make($request->all(), $validations);
         if ($validator->fails()) {
-            return Redirect::to('admin/settings' . '#' . $category)->withErrors($validator)->withInput();
+            return Redirect::to('admin/settings' . '#' . $redirectCategory)->withErrors($validator)->withInput();
         }
 
         $settingsClass = new $resolvedSettingsClass();
@@ -206,10 +284,29 @@ class SettingsController extends Controller
                 $settingsClass->$key = $inputValue;
             }
         }
+
+        // Sanitize HTML rendered with {!! !!} on the public pages: legal pages
+        // (imprint, privacy policy, tos), MOTD, global alert and ticket info.
+        if ($resolvedSettingsClass === TermsSettings::class
+            || $resolvedSettingsClass === WebsiteSettings::class
+            || $resolvedSettingsClass === GeneralSettings::class
+            || $resolvedSettingsClass === TicketSettings::class) {
+            $htmlKeys = array_merge(
+                ['imprint', 'privacy_policy', 'terms_of_service'],
+                ['motd_message', 'alert_message', 'information'],
+            );
+
+            foreach ($htmlKeys as $key) {
+                if (isset($settingsClass->$key) && $settingsClass->$key !== null) {
+                    $settingsClass->$key = (new HtmlSanitizer())->clean($settingsClass->$key);
+                }
+            }
+        }
+
         $settingsClass->save();
 
 
-        return Redirect::to('admin/settings' . '#' . $category)->with('success', 'Settings updated successfully.');
+        return Redirect::to('admin/settings' . '#' . $redirectCategory)->with('success', 'Settings updated successfully.');
     }
 
     public function updateIcons(Request $request)
