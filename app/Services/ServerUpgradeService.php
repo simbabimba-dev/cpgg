@@ -3,6 +3,9 @@
 namespace App\Services;
 
 use App\Classes\PterodactylClient;
+use App\Exceptions\Server\InsufficientCreditsException;
+use App\Exceptions\Server\InsufficientResourcesException;
+use App\Exceptions\Server\ServerUpgradeException;
 use App\Models\Server;
 use App\Models\User;
 use App\Models\Product;
@@ -49,7 +52,7 @@ class ServerUpgradeService
             $requiredDisk = $product->disk - $server->product->disk;
 
             if (!$this->pterodactylClient->checkNodeResources($node, $requiredMemory, $requiredDisk)) {
-                throw new \Exception('Insufficient resources on the node to upgrade the server.', 422);
+                throw new InsufficientResourcesException('Insufficient resources on the node to upgrade the server.');
             }
 
             $pterodactylServerAllocation = $pterodactylServer['allocation'];
@@ -65,7 +68,7 @@ class ServerUpgradeService
 
                 $server->delete();
 
-                throw new \Exception(
+                throw new ServerUpgradeException(
                     sprintf(
                         'Failed to update server on Pterodactyl: %s',
                         $updateServerResponse->json()['errors'][0]['detail'] ?? 'Unknown error'
@@ -82,7 +85,7 @@ class ServerUpgradeService
                     'error' => $powerActionResponse->json()
                 ]);
 
-                throw new \Exception(
+                throw new ServerUpgradeException(
                     sprintf(
                         'Failed to restart server on Pterodactyl: %s',
                         $powerActionResponse->json()['errors'][0]['detail'] ?? 'Unknown error'
@@ -98,7 +101,7 @@ class ServerUpgradeService
 
             return $server;
         } catch (\Exception $e) {
-            throw new \Exception($e->getMessage(), $e->getCode());
+            throw new ServerUpgradeException($e->getMessage(), $e->getCode() ?: 500, $e);
         }
     }
 
@@ -110,7 +113,7 @@ class ServerUpgradeService
         $refundAmount = $server->product->price - ($server->product->price * ($timeUsed / $billingPeriodSeconds));
 
         if ($user->credits < ($product->price - $refundAmount)) {
-            throw new \Exception('Insufficient credits to upgrade the server.', 422);
+            throw new InsufficientCreditsException('Insufficient credits to upgrade the server.');
         }
 
         // Refund the user for the unused time on the current product.

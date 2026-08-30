@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Exceptions\Auth\PterodactylRegistrationException;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
@@ -16,7 +17,6 @@ use App\Settings\WebsiteSettings;
 use App\Actions\ProcessReferralAction;
 use Illuminate\Foundation\Auth\RegistersUsers;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
@@ -127,17 +127,13 @@ class RegisterController extends Controller
         ]);
         
         if ($response->failed()) {
-            Log::error('Pterodactyl Registration Error: ' . ($response->json()['errors'][0]['detail'] ?? 'Unknown error'));
-            throw ValidationException::withMessages([
-                'ptero_registration_error' => [__('Failed to create account on Pterodactyl. Please contact Support!')],
-            ]);
+            throw new PterodactylRegistrationException(
+                'Pterodactyl Registration Error: ' . ($response->json()['errors'][0]['detail'] ?? 'Unknown error')
+            );
         }
 
         if (!isset($response->json()['attributes']['id'])) {
-            Log::error('Pterodactyl Registration Error: Missing user ID in response');
-            throw ValidationException::withMessages([
-                'ptero_registration_error' => [__('Failed to create account on Pterodactyl. Please contact Support!')],
-            ]);
+            throw new PterodactylRegistrationException('Pterodactyl Registration Error: Missing user ID in response');
         }
 
         $user = User::create([

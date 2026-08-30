@@ -18,6 +18,7 @@ use App\Services\ServerCreationService;
 use App\Settings\PterodactylSettings;
 use App\Classes\PterodactylClient;
 use App\Enums\BillingPriority;
+use App\Exceptions\Server\ServerUpgradeException;
 use App\Settings\GeneralSettings;
 use Exception;
 use Illuminate\Database\Eloquent\Builder;
@@ -602,12 +603,12 @@ class ServerController extends Controller
 
         $response = $this->pterodactyl->updateServer($server, $newProduct);
         if ($response->failed()) {
-            throw new Exception("Failed to update server on Pterodactyl");
+            throw new ServerUpgradeException('Failed to update server on Pterodactyl');
         }
 
         $restartResponse = $this->pterodactyl->powerAction($server, 'restart');
         if ($restartResponse->failed()) {
-            throw new Exception('Could not restart the server: ' . $restartResponse->json()['errors'][0]['detail']);
+            throw new ServerUpgradeException('Could not restart the server: ' . $restartResponse->json()['errors'][0]['detail']);
         }
 
         // Calculate refund

@@ -2,10 +2,13 @@
 
 namespace App\Exceptions;
 
+use App\Exceptions\Api\ApiException;
+use App\Exceptions\Pterodactyl\PterodactylException;
+use App\Exceptions\Server\ServerException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -51,6 +54,41 @@ class Handler extends ExceptionHandler
         $this->reportable(function (Throwable $e) {
             //
         });
+
+        // Render API exceptions as JSON with their HTTP status code.
+        $this->renderable(function (ApiException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                ], $e->getStatusCode());
+            }
+
+            return null;
+        });
+
+        // Render Pterodactyl exceptions with a mapped status code.
+        $this->renderable(function (PterodactylException $e, $request) {
+            $status = $e->getStatusCode() ?? 500;
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                ], $status);
+            }
+
+            return null;
+        });
+
+        // Render server exceptions with their status code.
+        $this->renderable(function (ServerException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                ], $e->getStatusCode());
+            }
+
+            return null;
+        });
     }
 
 
@@ -62,8 +100,6 @@ class Handler extends ExceptionHandler
      */
     public function render($request, Throwable $exception)
     {
-        Log::error($exception->getMessage()); // Log the exception
-
         if ($this->isHttpException($exception)) {
             if (view()->exists('errors.' . $exception->getStatusCode())) {
                 return response()->view(

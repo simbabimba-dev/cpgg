@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exceptions\Payment\InvoiceException;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use ZipArchive;
 use Throwable;
@@ -18,8 +18,7 @@ class InvoiceController extends Controller
         $zip_save_path = storage_path('invoices.zip');
 
         if ($zip->open($zip_save_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            Log::error("Failed to create zip archive at path: " . $zipPath);
-            return response()->json(['message' => 'Failed to create zip archive'], 500);
+            throw new InvoiceException('Failed to create zip archive at path: ' . $zip_save_path);
         }
 
         try {
@@ -36,8 +35,7 @@ class InvoiceController extends Controller
             $zip->close();
 
         } catch (Throwable $e) {
-            Log::error("Error while adding files to zip: " . $e->getMessage());
-            return response()->json(['message' => 'Failed to add files to zip'], 500);
+            throw new InvoiceException('Error while adding files to zip: ' . $e->getMessage(), 500, $e);
         }
 
         return response()->download($zip_save_path)->deleteFileAfterSend(true);
@@ -49,15 +47,13 @@ class InvoiceController extends Controller
         try {
             $invoice = Invoice::where('payment_id', '=', $id)->firstOrFail();
         } catch (Throwable $e) {
-            Log::error("Error finding invoice: " . $e->getMessage());
-            return redirect()->back()->withErrors(['message' => __('An unexpected error occurred. Please check the logs!')]);
+            throw new InvoiceException('Error finding invoice: ' . $e->getMessage(), 404, $e);
         }
 
         $filePath = storage_path('app/invoice/' . $invoice->invoice_user . '/' . $invoice->created_at->format('Y') . '/' . $invoice->invoice_name . '.pdf');
 
         if (!file_exists($filePath)) {
-            Log::error("Invoice file not found: " . $filePath);
-            return redirect()->back()->withErrors(['message' => __('Invoice does not exist on filesystem!')]);
+            throw new InvoiceException('Invoice file not found: ' . $filePath, 404);
         }
 
         return response()->download($filePath);

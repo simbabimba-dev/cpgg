@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\Api\ApiException;
 use App\Http\Resources\NotificationResource;
 use App\Models\User;
 use App\Http\Controllers\Controller;
@@ -15,7 +16,7 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Exception;
+use Throwable;
 
 /**
  * @group Notifications
@@ -136,11 +137,8 @@ class NotificationController extends Controller
                     'channels' => $via
                 ]
             ]);
-        } catch (Exception $e) {
-            return response()->json([
-                'error' => 'Failed to send notification.',
-                'message' => $e->getMessage()
-            ], 500);
+        } catch (Throwable $e) {
+            throw new ApiException('Failed to send notification: ' . $e->getMessage(), 500, $e);
         }
     }
 
@@ -188,11 +186,8 @@ class NotificationController extends Controller
                     'channels' => $via
                 ]
             ]);
-        } catch (Exception $e) {
-            return response()->json([
-                'error' => 'Failed to send notification.',
-                'message' => $e->getMessage()
-            ], 500);
+        } catch (Throwable $e) {
+            throw new ApiException('Failed to send notification: ' . $e->getMessage(), 500, $e);
         }
     }
 

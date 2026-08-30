@@ -19,11 +19,9 @@ use App\Services\ServerCreationService;
 use App\Services\ServerUpgradeService;
 use App\Settings\PterodactylSettings;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Spatie\QueryBuilder\QueryBuilder;
 use Spatie\QueryBuilder\AllowedFilter;
-use Exception;
 
 /**
  * @group Server Management
@@ -162,7 +160,7 @@ class ServerController extends Controller
      * @param  CreateServerRequest  $request
      * @return ServerResource
      *
-     * @throws ValidationException
+     * @throws \Illuminate\Validation\ValidationException
      */
     public function store(CreateServerRequest $request)
     {
@@ -171,15 +169,9 @@ class ServerController extends Controller
         $user = User::findOrFail($data['user_id']);
         $product = Product::with('eggs')->findOrFail($data['product_id']);
 
-        try {
-            $server = $this->serverCreationService->handle($user, $product, $data);
+        $server = $this->serverCreationService->handle($user, $product, $data);
 
-            return ServerResource::make($server->fresh());
-        } catch (Exception $e) {
-            return response()->json([
-                'message' => $e->getMessage()
-            ], 401);
-        }
+        return ServerResource::make($server->fresh());
     }
 
     /**
@@ -220,7 +212,6 @@ class ServerController extends Controller
      * @return ServerResource
      *
      * @throws ModelNotFoundException
-     * @throws Exception
      */
     public function update(UpdateServerRequest $request, Server $server)
     {
@@ -228,28 +219,19 @@ class ServerController extends Controller
 
         $server->fill($data);
 
-        try {
-            if ($server->isDirty(['name', 'description', 'user_id'])) {
-                $pteroData = array_merge($request->only(['name', 'description']), ['user' => $data['user_id']]);
+        if ($server->isDirty(['name', 'description', 'user_id'])) {
+            $pteroData = array_merge($request->only(['name', 'description']), ['user' => $data['user_id']]);
 
-                $response = $this->pterodactylClient->updateServerDetails($server, $pteroData);
+            $response = $this->pterodactylClient->updateServerDetails($server, $pteroData);
 
-                if (!$response->successful()) {
-                    $response->throw();
-                }
+            if (!$response->successful()) {
+                $response->throw();
             }
-
-            $server->save();
-
-            return ServerResource::make($server->refresh());
-        } catch (Exception $e) {
-            logger()->error('Failed to update server in Pterodactyl.', [
-                'error' => $e->getMessage(),
-                'server_id' => $server->id
-            ]);
-
-            return response()->json(['message' => $e->getMessage()], 500);
         }
+
+        $server->save();
+
+        return ServerResource::make($server->refresh());
     }
 
     /**
@@ -279,7 +261,7 @@ class ServerController extends Controller
      *
      * @param  UpdateServerBuildRequest  $request
      * @param  Server  $server
-     * @return ServerResource|JsonResponse
+     * @return ServerResource
      *
      * @throws ModelNotFoundException
      */
@@ -290,13 +272,9 @@ class ServerController extends Controller
         $user = User::findOrFail($data['user_id']);
         $product = Product::findOrFail($data['product_id']);
 
-        try {
-            $server = $this->serverUpgradeService->handle($user, $product, $server);
+        $server = $this->serverUpgradeService->handle($user, $product, $server);
 
-            return ServerResource::make($server->fresh());
-        } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], $e->getCode() ?: 500);
-        }
+        return ServerResource::make($server->fresh());
     }
 
     /**
@@ -317,21 +295,17 @@ class ServerController extends Controller
     {
         $data = $request->validated();
 
-        try {
-            $logMessage = sprintf("The server with ID: %d was deleted via API", $server->id);
+        $logMessage = sprintf("The server with ID: %d was deleted via API", $server->id);
 
-            if (!empty($data['reason'])) {
-                $logMessage .= " | Reason: " . e($data['reason']);
-            }
-
-            activity()->performedOn($server)->log($logMessage);
-
-            event(new ServerDeletedEvent($server));
-
-            $server->delete();
-        } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 500);
+        if (!empty($data['reason'])) {
+            $logMessage .= " | Reason: " . e($data['reason']);
         }
+
+        activity()->performedOn($server)->log($logMessage);
+
+        event(new ServerDeletedEvent($server));
+
+        $server->delete();
 
         return response()->noContent();
     }
@@ -362,7 +336,7 @@ class ServerController extends Controller
      *
      * @param  SuspendServerRequest  $request
      * @param  Server  $server
-     * @return ServerResource|JsonResponse
+     * @return ServerResource
      *
      * @throws ModelNotFoundException
      */
@@ -370,19 +344,15 @@ class ServerController extends Controller
     {
         $data = $request->validated();
 
-        try {
-            $logMessage = sprintf("The server with ID: %d was suspended via API", $server->id);
+        $logMessage = sprintf("The server with ID: %d was suspended via API", $server->id);
 
-            if (!empty($data['reason'])) {
-                $logMessage .= " | Reason: " . e($data['reason']);
-            }
-
-            activity()->performedOn($server)->log($logMessage);
-
-            $server->suspend();
-        } catch (Exception $exception) {
-            return response()->json(['message' => $exception->getMessage()], 500);
+        if (!empty($data['reason'])) {
+            $logMessage .= " | Reason: " . e($data['reason']);
         }
+
+        activity()->performedOn($server)->log($logMessage);
+
+        $server->suspend();
 
         return ServerResource::make($server);
     }
@@ -413,7 +383,7 @@ class ServerController extends Controller
      *
      * @param  UnsuspendServerRequest  $request
      * @param  Server  $server
-     * @return ServerResource|JsonResponse
+     * @return ServerResource
      *
      * @throws ModelNotFoundException
      */
@@ -421,19 +391,15 @@ class ServerController extends Controller
     {
         $data = $request->validated();
 
-        try {
-            $logMessage = sprintf("The server with ID: %d was unsuspended via API", $server->id);
+        $logMessage = sprintf("The server with ID: %d was unsuspended via API", $server->id);
 
-            if (!empty($data['reason'])) {
-                $logMessage .= " | Reason: " . e($data['reason']);
-            }
-
-            activity()->performedOn($server)->log($logMessage);
-
-            $server->unSuspend();
-        } catch (Exception $exception) {
-            return response()->json(['message' => $exception->getMessage()], 500);
+        if (!empty($data['reason'])) {
+            $logMessage .= " | Reason: " . e($data['reason']);
         }
+
+        activity()->performedOn($server)->log($logMessage);
+
+        $server->unSuspend();
 
         return ServerResource::make($server);
     }
