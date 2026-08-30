@@ -207,7 +207,7 @@
                                                         </div>
                                                     @endif
                                                     @foreach ($section['options'] as $key => $value)
-                                                    <div class="mb-3 row">
+                                                    <div class="mb-3 row" id="field_{{ $category }}_{{ $key }}" @if (isset($value['visible_when'])) data-visible-when='{{ json_encode($value['visible_when']) }}' @endif>
                                                         <div class="col-md-4 col-12 d-flex align-items-center">
                                                           <label class="w-100 d-inline-flex justify-content-between align-items-center" for="{{ $key }}">
                                                             {{ $value['label'] }}
@@ -246,9 +246,22 @@
                                                                         @break
 
                                                                         @case($value['type'] == 'number')
-                                                                            <input type="number" step="{{ $value['step'] ?? '1' }}" class="form-control"
-                                                                                name="{{ $key }}"
-                                                                                value="{{ isset($value['converted_value']) ? $value['converted_value'] : $value['value'] }}">
+                                                                            @if (isset($value['suffix']))
+                                                                                <div class="input-group">
+                                                                                    <input type="number" step="{{ $value['step'] ?? '1' }}" class="form-control"
+                                                                                        name="{{ $key }}"
+                                                                                        value="{{ isset($value['converted_value']) ? $value['converted_value'] : $value['value'] }}">
+                                                                                    <div class="input-group-append">
+                                                                                        <span class="input-group-text"
+                                                                                            data-suffix-for="{{ $key }}"
+                                                                                            data-suffix-mapping='{{ json_encode($value['suffix']) }}'>&nbsp;</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            @else
+                                                                                <input type="number" step="{{ $value['step'] ?? '1' }}" class="form-control"
+                                                                                    name="{{ $key }}"
+                                                                                    value="{{ isset($value['converted_value']) ? $value['converted_value'] : $value['value'] }}">
+                                                                            @endif
                                                                         @break
 
                                                                         @case($value['type'] == 'select')
@@ -434,11 +447,55 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', (event) => {
+        function applySettingsFieldVisibility() {
+            // Hide/show fields based on the value of another option (visible_when).
+            // Lookups are scoped to the enclosing form so that duplicate option
+            // keys across categories (e.g. fee_type on every gateway) don't clash.
+            $('[data-visible-when]').each(function () {
+                const $row = $(this);
+                const $form = $row.closest('form');
+                const conditions = $row.data('visible-when');
+                let visible = true;
+
+                for (const [depKey, expected] of Object.entries(conditions || {})) {
+                    const $dep = $form.find('#' + depKey);
+                    if (!$dep.length) {
+                        visible = false;
+                        break;
+                    }
+
+                    const actual = $dep.val();
+                    const expectedValues = Array.isArray(expected) ? expected : [expected];
+                    if (!expectedValues.includes(actual)) {
+                        visible = false;
+                        break;
+                    }
+                }
+
+                $row.toggle(visible);
+            });
+
+            // Update the suffix of an input based on the value of another option.
+            $('[data-suffix-mapping]').each(function () {
+                const $suffix = $(this);
+                const $form = $suffix.closest('form');
+                const mapping = $suffix.data('suffix-mapping') || {};
+                const $dep = $form.find('#' + (mapping.depends_on || ''));
+                const value = $dep.length ? $dep.val() : null;
+                const text = (mapping.map && mapping.map[value]) || '';
+                $suffix.text(text || '\u00A0');
+            });
+        }
+
+        $(function () {
             $('.custom-select').select2({
                 width: '100%',
             });
-        })
+
+            applySettingsFieldVisibility();
+        });
+
+        $(document).on('change', '.custom-select', applySettingsFieldVisibility);
 
         tinymce.init({
             selector: 'textarea',

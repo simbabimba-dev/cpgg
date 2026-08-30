@@ -6,6 +6,7 @@ use App\Facades\Currency;
 use App\Helpers\ExtensionHelper;
 use App\Http\Controllers\Controller;
 use App\Classes\HtmlSanitizer;
+use App\Classes\GatewayFeeSettings;
 use App\Settings\GeneralSettings;
 use App\Settings\TermsSettings;
 use App\Settings\TicketSettings;
@@ -73,7 +74,8 @@ class SettingsController extends Controller
 
             $className = $file;
             // instantiate the class and call toArray method to get all options
-            $options = (new $className())->toArray();
+            $settingsInstance = new $className();
+            $options = $settingsInstance->toArray();
 
             // call getOptionInputData method to get all options
             if (method_exists($className, 'getOptionInputData')) {
@@ -97,6 +99,8 @@ class SettingsController extends Controller
                     'options' => $optionInputData[$key]['options'] ?? [],
                     'identifier' => $optionInputData[$key]['identifier'] ?? 'option',
                     'section' => $optionInputData[$key]['section'] ?? null,
+                    'visible_when' => $optionInputData[$key]['visible_when'] ?? null,
+                    'suffix' => $optionInputData[$key]['suffix'] ?? null,
                 ];
 
                 if($optionInputData[$key]['type'] === 'number') {
@@ -104,6 +108,36 @@ class SettingsController extends Controller
 
                     if ($optionInputData[$key]['mustBeConverted'] ?? false) {
                         $optionsData[$key]['converted_value'] = Currency::formatForForm($value);
+                    }
+                }
+            }
+
+            // Payment gateway fee settings are managed by the core for every
+            // gateway, so gateway creators do not have to declare them.
+            if (GatewayFeeSettings::isGatewaySettings($className)) {
+                $sectionDefinitions = array_merge($sectionDefinitions, GatewayFeeSettings::sections());
+
+                foreach (GatewayFeeSettings::optionDefinitions() as $key => $definition) {
+                    $feeValues = GatewayFeeSettings::values($settingsInstance);
+
+                    $optionsData[$key] = [
+                        'value' => $feeValues[$key],
+                        'label' => $definition['label'] ?? ucwords(str_replace('_', ' ', $key)),
+                        'type' => $definition['type'] ?? 'string',
+                        'description' => $definition['description'] ?? '',
+                        'options' => $definition['options'] ?? [],
+                        'identifier' => $definition['identifier'] ?? 'option',
+                        'section' => $definition['section'] ?? null,
+                        'visible_when' => $definition['visible_when'] ?? null,
+                        'suffix' => $definition['suffix'] ?? null,
+                    ];
+
+                    if (($definition['type'] ?? null) === 'number') {
+                        $optionsData[$key]['step'] = $definition['step'] ?? '1';
+
+                        if ($definition['mustBeConverted'] ?? false) {
+                            $optionsData[$key]['converted_value'] = Currency::formatForForm((int) $feeValues[$key]);
+                        }
                     }
                 }
             }
@@ -301,6 +335,10 @@ class SettingsController extends Controller
                     $settingsClass->$key = (new HtmlSanitizer())->clean($settingsClass->$key);
                 }
             }
+        }
+
+        if (GatewayFeeSettings::isGatewaySettings($resolvedSettingsClass)) {
+            GatewayFeeSettings::saveFromRequest($settingsClass, $request->all());
         }
 
         $settingsClass->save();

@@ -57,36 +57,60 @@ class StripeExtension extends PaymentExtension
         }
 
         $stripeClient = self::getStripeClient();
+
+        $currency = $shopProduct->currency_code;
+
+        $lineItems = [];
+
+        // Product subtotal (after discount) excluding tax and fee.
+        // Product + tax + fee must always equal the total price charged.
+        $productUnit = $totalPrice - (int) $payment->fee - (int) $payment->tax_value;
+
+        $lineItems[] = [
+            'price_data' => [
+                'currency' => $currency,
+                'product_data' => [
+                    'name' => $shopProduct->display,
+                    'description' => $shopProduct->description,
+                ],
+                'unit_amount' => self::convertAmount(max(0, $productUnit), $currency),
+            ],
+            'quantity' => 1,
+        ];
+
+        if ((int) $payment->tax_value > 0) {
+            $lineItems[] = [
+                'price_data' => [
+                    'currency' => $currency,
+                    'product_data' => [
+                        'name' => __('Tax'),
+                        'description' => $shopProduct->getTaxPercent() . '%',
+                    ],
+                    'unit_amount' => self::convertAmount((int) $payment->tax_value, $currency),
+                ],
+                'quantity' => 1,
+            ];
+        }
+
+        if ((int) $payment->fee > 0) {
+            $lineItems[] = [
+                'price_data' => [
+                    'currency' => $currency,
+                    'product_data' => [
+                        'name' => __('Payment fee'),
+                        'description' => __('Fee charged for using this payment method'),
+                    ],
+                    'unit_amount' => self::convertAmount((int) $payment->fee, $currency),
+                ],
+                'quantity' => 1,
+            ];
+        }
+
         $request = $stripeClient->checkout->sessions->create([
             'metadata' => [
                 'payment_id' => $payment->id,
             ],
-            'line_items' => [
-                [
-                    'price_data' => [
-                        'currency' => $shopProduct->currency_code,
-                        'product_data' => [
-                            'name' => $shopProduct->display,
-                            'description' => $shopProduct->description,
-                        ],
-                        'unit_amount' => self::convertAmount($totalPrice, $shopProduct->currency_code),
-                    ],
-                    'quantity' => 1,
-                ],
-                /* Removed due to errors in the coupon discount calculation. Its not used in other paymentgateways aswell and basically nice to have but unnessecary
-                [
-                    'price_data' => [
-                        'currency' => $shopProduct->currency_code,
-                        'product_data' => [
-                            'name' => __('Tax'),
-                            'description' => $shopProduct->getTaxPercent() . '%',
-                        ],
-                        'unit_amount_decimal' => round($shopProduct->getTaxValue(), 2),
-                    ],
-                    'quantity' => 1,
-                ],
-                */
-            ],
+            'line_items' => $lineItems,
 
             'mode' => 'payment',
             'success_url' => route('payment.StripeSuccess', ['payment' => $payment->id]) . '&session_id={CHECKOUT_SESSION_ID}',
@@ -446,114 +470,83 @@ class StripeExtension extends PaymentExtension
      */
     public static function checkPriceAmount(float $amount,  string $currencyCode, string $payment_method)
     {
-        $minimums = [
-            "USD" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "AED" => [
-                "paypal" => 0,
-                "stripe" => 2
-            ],
-            "AUD" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "BGN" => [
-                "paypal" => 0,
-                "stripe" => 1
-            ],
-            "BRL" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "CAD" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "CHF" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "CZK" => [
-                "paypal" => 0,
-                "stripe" => 15
-            ],
-            "DKK" => [
-                "paypal" => 0,
-                "stripe" => 2.5
-            ],
-            "EUR" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "GBP" => [
-                "paypal" => 0,
-                "stripe" => 0.3
-            ],
-            "HKD" => [
-                "paypal" => 0,
-                "stripe" => 4
-            ],
-            "HRK" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "HUF" => [
-                "paypal" => 0,
-                "stripe" => 175
-            ],
-            "INR" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "JPY" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "MXN" => [
-                "paypal" => 0,
-                "stripe" => 10
-            ],
-            "MYR" => [
-                "paypal" => 0,
-                "stripe" => 2
-            ],
-            "NOK" => [
-                "paypal" => 0,
-                "stripe" => 3
-            ],
-            "NZD" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "PLN" => [
-                "paypal" => 0,
-                "stripe" => 2
-            ],
-            "RON" => [
-                "paypal" => 0,
-                "stripe" => 2
-            ],
-            "SEK" => [
-                "paypal" => 0,
-                "stripe" => 3
-            ],
-            "SGD" => [
-                "paypal" => 0,
-                "stripe" => 0.5
-            ],
-            "THB" => [
-                "paypal" => 0,
-                "stripe" => 10
-            ]
-        ];
-
-        if (!isset($minimums[$currencyCode], $minimums[$currencyCode][$payment_method])) {
-            return false;
+        $minimum = static::getMinimumPrice($currencyCode);
+        if ($minimum === null) {
+            return true;
         }
 
-        return $amount >= $minimums[$currencyCode][$payment_method];
+        return $amount >= $minimum;
+    }
+
+    /**
+     * Stripe presentment currencies as documented at https://docs.stripe.com/currencies.
+     * Kept static so the supported list stays aligned with Stripe's actual coverage,
+     * independent of the global currency_codes config.
+     *
+     * @return array<int, string>
+     */
+    public static function getSupportedCurrencies(): array
+    {
+        return [
+            'AED', 'AFN', 'ALL', 'AMD', 'ANG', 'AOA', 'ARS', 'AUD', 'AWG', 'AZN',
+            'BAM', 'BBD', 'BDT', 'BIF', 'BMD', 'BND', 'BOB', 'BRL', 'BSD', 'BWP',
+            'BYN', 'BZD', 'CAD', 'CDF', 'CHF', 'CLP', 'CNY', 'COP', 'CRC', 'CVE',
+            'CZK', 'DJF', 'DKK', 'DOP', 'DZD', 'EGP', 'ETB', 'EUR', 'FJD', 'FKP',
+            'GBP', 'GEL', 'GIP', 'GMD', 'GNF', 'GTQ', 'GYD', 'HKD', 'HNL', 'HTG',
+            'HUF', 'IDR', 'ILS', 'INR', 'ISK', 'JMD', 'JPY', 'KES', 'KGS', 'KHR',
+            'KMF', 'KRW', 'KYD', 'KZT', 'LAK', 'LBP', 'LKR', 'LRD', 'LSL', 'MAD',
+            'MDL', 'MGA', 'MKD', 'MMK', 'MNT', 'MOP', 'MUR', 'MVR', 'MWK', 'MXN',
+            'MYR', 'MZN', 'NAD', 'NGN', 'NIO', 'NOK', 'NPR', 'NZD', 'PAB', 'PEN',
+            'PGK', 'PHP', 'PKR', 'PLN', 'PYG', 'QAR', 'RON', 'RSD', 'RUB', 'RWF',
+            'SAR', 'SBD', 'SCR', 'SEK', 'SGD', 'SHP', 'SLE', 'SOS', 'SRD', 'STD',
+            'SZL', 'THB', 'TJS', 'TOP', 'TRY', 'TTD', 'TWD', 'TZS', 'UAH', 'UGX',
+            'USD', 'UYU', 'UZS', 'VND', 'VUV', 'WST', 'XAF', 'XCD', 'XCG', 'XOF',
+            'XPF', 'YER', 'ZAR', 'ZMW',
+        ];
+    }
+
+    /**
+     * Minimum charge amounts per currency as documented by Stripe,
+     * expressed in the currency's display units.
+     */
+    public static function getMinimumPrice(string $currencyCode): ?float
+    {
+        // https://docs.stripe.com/currencies#minimum-and-maximum-charge-amounts
+        $minimums = [
+            'AED' => 2.00,
+            'ARS' => 0.50,
+            'AUD' => 0.50,
+            'BRL' => 0.50,
+            'CAD' => 0.50,
+            'CHF' => 0.50,
+            'COP' => 0.50,
+            'CZK' => 15.00,
+            'DKK' => 2.50,
+            'EUR' => 0.50,
+            'GBP' => 0.30,
+            'HKD' => 4.00,
+            'HUF' => 175.00,
+            'IDR' => 0.50,
+            'ILS' => 0.50,
+            'INR' => 0.50,
+            'JPY' => 50.00,
+            'KRW' => 50.00,
+            'MXN' => 10.00,
+            'MYR' => 2.00,
+            'NOK' => 3.00,
+            'NZD' => 0.50,
+            'PHP' => 0.50,
+            'PLN' => 2.00,
+            'RON' => 2.00,
+            'RUB' => 0.50,
+            'SEK' => 3.00,
+            'SGD' => 0.50,
+            'THB' => 10.00,
+            'USD' => 0.50,
+            'ZAR' => 0.50,
+        ];
+
+        return $minimums[strtoupper($currencyCode)] ?? null;
     }
 
     protected static function convertAmount(float $amount, string $currency): int

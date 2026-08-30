@@ -50,8 +50,16 @@ trait Invoiceable
 
         $notes = [
             __("Payment method") . ": " . $payment->payment_method,
-            $invoice_settings->additional_notes ?: "",
         ];
+
+        if ((int) $payment->fee > 0) {
+            $notes[] = __("Payment fee") . ": " . resolve(CurrencyHelper::class)->formatToCurrency((int) $payment->fee, $payment->currency_code);
+        }
+
+        if ($invoice_settings->additional_notes) {
+            $notes[] = $invoice_settings->additional_notes;
+        }
+
         $notes = implode("<br>", $notes);
 
         $invoice = DailyInvoice::make()

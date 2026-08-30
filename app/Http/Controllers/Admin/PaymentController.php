@@ -77,12 +77,30 @@ class PaymentController extends Controller
                     continue;
                 }
 
-
                 $payment = new \stdClass();
                 $payment->name = ExtensionHelper::getExtensionConfig($extensionName, 'name') ?? $extensionName;
                 $payment->image = asset('images/Extensions/PaymentGateways/' . strtolower($extensionName) . '_logo.png');
+                $payment->available = true;
+                $payment->unavailable_reason = null;
+
+                $extensionClass = ExtensionHelper::getExtensionClass($extensionName);
+                if ($extensionClass && class_exists($extensionClass) && method_exists($extensionClass, 'isAvailableForCheckout')) {
+                    $totalPrice = (float) $currencyHelper->convertForDisplay($shopProduct->getTotalPrice());
+                    $availability = $extensionClass::isAvailableForCheckout($shopProduct->currency_code, $totalPrice);
+                    $payment->available = $availability['available'];
+                    $payment->unavailable_reason = $availability['reason'];
+                }
+
+                $payment->fee_config = $extensionClass::getFeeConfig();
+                $payment->fee_description = $extensionClass::getFeeDescription($shopProduct->currency_code);
+
                 $paymentGateways[] = $payment;
             }
+        }
+
+        $gatewayFeeConfigs = [];
+        foreach ($paymentGateways as $gateway) {
+            $gatewayFeeConfigs[$gateway->name] = $gateway->fee_config ?? [];
         }
 
         return view('store.checkout')->with([
@@ -93,7 +111,8 @@ class PaymentController extends Controller
             'taxvalue' => $shopProduct->getTaxValue(),
             'taxpercent' => $shopProduct->getTaxPercent(),
             'total' => $shopProduct->getTotalPrice(),
-            'paymentGateways' => $paymentGateways,
+            'paymentGateways'   => $paymentGateways,
+            'gatewayFeeConfigs' => $gatewayFeeConfigs,
             'productIsFree' => $price <= 0,
             'credits_display_name' => $general_settings->credits_display_name,
             'isCouponsEnabled' => $coupon_settings->enabled,
@@ -140,7 +159,7 @@ class PaymentController extends Controller
         return redirect()->route('home')->with('success', __('Your :credits balance has been increased!', ['credits' => $general_settings->credits_display_name]));
     }
 
-    public function pay(Request $request)
+    public function pay(Request $request, GeneralSettings $general_settings)
     {
         $request->validate([
             'product_id' => ['required', 'exists:shop_products,id'],
@@ -157,20 +176,24 @@ class PaymentController extends Controller
             $paymentGateway = $request->input('payment_method');
             $couponCode = $request->input('coupon_code');
 
-            $subtotal = $shopProduct->getTotalPrice();
+            $discountedPrice = $shopProduct->getPriceAfterDiscount();
 
-            // Apply Coupon
+            // Apply Coupon to the pre-tax discounted price. The tax is
+            // recalculated afterwards, so the total is price - discount + tax + fee.
             if ($couponCode) {
                 if ($this->isCouponValid($couponCode, $user, $shopProduct->id)) {
-                    $subtotal = $this->applyCoupon($couponCode, $subtotal);
+                    $discountedPrice = $this->applyCoupon($couponCode, $discountedPrice);
                 } else {
                     $couponCode = null;
                 }
             }
 
-            if ($subtotal <= 0) {
+            if ($discountedPrice <= 0) {
                 return $this->handleFreeProduct($shopProduct, $general_settings, $couponCode);
             }
+
+            $taxValue = $discountedPrice * $shopProduct->getTaxPercent() / 100;
+            $subtotal = $discountedPrice + $taxValue;
 
             $enabledPaymentGateways = [];
             $extensions = ExtensionHelper::getAllExtensionsByNamespace('PaymentGateways');
@@ -184,8 +207,26 @@ class PaymentController extends Controller
             }
 
             if (!in_array($paymentGateway, $enabledPaymentGateways, true)) {
-                return redirect()->route('checkout', $shopProduct)->with('error', __('The selected payment gateway is unavailable.'));
+                return redirect()->route('checkout', $shopProduct)->with('error', __('The selected payment gateway is unavailable'));
             }
+
+            $paymentGatewayExtension = ExtensionHelper::getExtensionClass($paymentGateway);
+            if (!$paymentGatewayExtension || !class_exists($paymentGatewayExtension)) {
+                return redirect()->route('checkout', $shopProduct)->with('error', __('The selected payment gateway is unavailable'));
+            }
+
+            $availability = $paymentGatewayExtension::isAvailableForCheckout(
+                $shopProduct->currency_code,
+                (float) app(CurrencyHelper::class)->convertForDisplay($subtotal)
+            );
+            if (!$availability['available']) {
+                return redirect()->route('checkout', $shopProduct)->with('error', $availability['reason']);
+            }
+
+            // Calculate the payment processing fee for this gateway and charge it
+            // on top of the product total.
+            $fee = $paymentGatewayExtension::getPaymentFee((int) $subtotal, $shopProduct->currency_code);
+            $totalPrice = $subtotal + $fee;
 
             // create a new payment
             $payment = Payment::create([
@@ -196,20 +237,16 @@ class PaymentController extends Controller
                 'status' => PaymentStatus::OPEN,
                 'amount' => $shopProduct->quantity,
                 'price' => $shopProduct->price,
-                'tax_value' => $shopProduct->getTaxValue(),
+                'tax_value' => $taxValue,
                 'tax_percent' => $shopProduct->getTaxPercent(),
-                'total_price' => $subtotal,
+                'total_price' => $totalPrice,
+                'fee' => $fee,
                 'currency_code' => $shopProduct->currency_code,
                 'shop_item_product_id' => $shopProduct->id,
                 'coupon_code' => $couponCode,
             ]);
 
-            $paymentGatewayExtension = ExtensionHelper::getExtensionClass($paymentGateway);
-            if (!$paymentGatewayExtension || !class_exists($paymentGatewayExtension)) {
-                throw new Exception('Invalid payment gateway class for: ' . $paymentGateway);
-            }
-
-            $redirectUrl = $paymentGatewayExtension::getRedirectUrl($payment, $shopProduct, $subtotal);
+            $redirectUrl = $paymentGatewayExtension::getRedirectUrl($payment, $shopProduct, $totalPrice);
 
         } catch (Exception $e) {
             Log::error('Payment checkout failed', [
@@ -265,6 +302,9 @@ class PaymentController extends Controller
             })
             ->editColumn('total_price', function (Payment $payment, CurrencyHelper $currencyHelper) {
                 return $currencyHelper->formatToCurrency($payment->total_price, $payment->currency_code);
+            })
+            ->editColumn('fee', function (Payment $payment, CurrencyHelper $currencyHelper) {
+                return (int) $payment->fee > 0 ? $currencyHelper->formatToCurrency($payment->fee, $payment->currency_code) : '-';
             })
             ->editColumn('created_at', function (Payment $payment) {
                 return [
