@@ -6,6 +6,7 @@ use App\Exceptions\Api\ApiException;
 use App\Exceptions\Pterodactyl\PterodactylNotFoundException;
 use App\Exceptions\Server\InsufficientCreditsException;
 use App\Exceptions\Server\ServerLimitReachedException;
+use App\Exceptions\Payment\InvoiceException;
 use Illuminate\Foundation\Testing\TestCase;
 use Tests\CreatesApplication;
 
@@ -21,16 +22,21 @@ class TestExceptionRendering extends TestCase
      */
     public function test_api_exception_renders_json_with_status_code(): void
     {
-        $this->app->instance(
-            \Illuminate\Contracts\Debug\ExceptionHandler::class,
-            new \App\Exceptions\Handler($this->app)
+        $handler = new \App\Exceptions\Handler($this->app);
+
+        $request = \Illuminate\Http\Request::create('/api/test', 'GET');
+        $request->headers->set('Accept', 'application/json');
+
+        $response = $handler->render(
+            $request,
+            new ApiException('Custom error', 418)
         );
 
-        $response = $this->withHeaders(['Accept' => 'application/json'])
-            ->get('/api/exception-test');
-
-        // Route does not exist, so we expect a 404 from the framework.
-        $response->assertStatus(404);
+        $this->assertSame(418, $response->getStatusCode());
+        $this->assertSame(
+            ['message' => 'Custom error'],
+            $response->getData(true)
+        );
     }
 
     /**
@@ -105,5 +111,35 @@ class TestExceptionRendering extends TestCase
 
         $this->assertSame(418, $response->getStatusCode());
         $this->assertStringContainsString('Custom error', $response->getContent());
+    }
+
+    public function test_invoice_exception_renders_404_json(): void
+    {
+        $handler = new \App\Exceptions\Handler($this->app);
+
+        $request = \Illuminate\Http\Request::create('/admin/test', 'GET');
+        $request->headers->set('Accept', 'application/json');
+
+        $response = $handler->render(
+            $request,
+            new InvoiceException('Invoice not found', 404)
+        );
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertStringContainsString('Invoice not found', $response->getContent());
+    }
+
+    public function test_invoice_exception_renders_web_error_page(): void
+    {
+        $handler = new \App\Exceptions\Handler($this->app);
+
+        $request = \Illuminate\Http\Request::create('/admin/test', 'GET');
+
+        $response = $handler->render(
+            $request,
+            new InvoiceException('Invoice not found', 404)
+        );
+
+        $this->assertSame(404, $response->getStatusCode());
     }
 }

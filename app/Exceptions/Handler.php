@@ -5,20 +5,17 @@ namespace App\Exceptions;
 use App\Exceptions\Api\ApiException;
 use App\Exceptions\Pterodactyl\PterodactylException;
 use App\Exceptions\Server\ServerException;
-use Illuminate\Auth\AuthenticationException;
+use App\Exceptions\Payment\PaymentException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 use Throwable;
 
 class Handler extends ExceptionHandler
 {
 
-
     /**
      * A list of exception types with their corresponding custom log levels.
      *
-     * @var array<class-string<\Throwable>, \Psr\Log\LogLevel::*>
+     * @var array<class-string<Throwable>, \Psr\Log\LogLevel::*>
      */
     protected $levels = [
         //
@@ -27,7 +24,7 @@ class Handler extends ExceptionHandler
     /**
      * A list of the exception types that are not reported.
      *
-     * @var array<int, class-string<\Throwable>>
+     * @var array<int, class-string<Throwable>>
      */
     protected $dontReport = [
         //
@@ -89,6 +86,16 @@ class Handler extends ExceptionHandler
 
             return null;
         });
+
+        $this->renderable(function (PaymentException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                ], $e->getStatusCode());
+            }
+
+            return null;
+        });
     }
 
 
@@ -100,6 +107,23 @@ class Handler extends ExceptionHandler
      */
     public function render($request, Throwable $exception)
     {
+        if ($exception instanceof PaymentException) {
+            $status = $exception->getStatusCode();
+
+            if (view()->exists('errors.' . $status)) {
+                return response()->view(
+                    'errors.' . $status,
+                    [
+                        'exception' => $exception,
+                        'errorCode' => $status,
+                        'title' => 'Error',
+                        'message' => $exception->getMessage(),
+                        'homeLink' => true,
+                    ],
+                    $status
+                );
+            }
+        }
         if ($this->isHttpException($exception)) {
             if (view()->exists('errors.' . $exception->getStatusCode())) {
                 return response()->view(

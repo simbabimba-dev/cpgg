@@ -112,7 +112,7 @@ class NotificationController extends Controller
         try {
             $data = $request->validated();
 
-            $via = match($data['via']) {
+            $via = match ($data['via']) {
                 'mail' => ['mail'],
                 'database' => ['database'],
                 'both' => ['mail', 'database'],
@@ -138,7 +138,7 @@ class NotificationController extends Controller
                 ]
             ]);
         } catch (Throwable $e) {
-            throw new ApiException('Failed to send notification: ' . $e->getMessage(), 500, $e);
+            throw new ApiException('Failed to send notification.', 500, $e);
         }
     }
 
@@ -161,7 +161,7 @@ class NotificationController extends Controller
         try {
             $data = $request->validated();
 
-            $via = match($data['via']) {
+            $via = match ($data['via']) {
                 'mail' => ['mail'],
                 'database' => ['database'],
                 'both' => ['mail', 'database'],
@@ -187,7 +187,7 @@ class NotificationController extends Controller
                 ]
             ]);
         } catch (Throwable $e) {
-            throw new ApiException('Failed to send notification: ' . $e->getMessage(), 500, $e);
+            throw new ApiException('Failed to send notification.', 500, $e);
         }
     }
 

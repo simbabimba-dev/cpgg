@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Classes\PterodactylClient;
 use App\Exceptions\Server\InsufficientCreditsException;
 use App\Exceptions\Server\InsufficientResourcesException;
+use App\Exceptions\Pterodactyl\PterodactylException;
 use App\Exceptions\Server\ServerUpgradeException;
 use App\Models\Server;
 use App\Models\User;
@@ -34,8 +35,9 @@ class ServerUpgradeService
      * @param Product $product
      * @param Server $server
      * @return Server
-     * 
-     * @throws \Exception
+     *
+     * @throws PterodactylException
+     * @throws ServerUpgradeException
      */
     public function handle(User $user, Product $product, Server $server): Server
     {
@@ -56,26 +58,6 @@ class ServerUpgradeService
             }
 
             $pterodactylServerAllocation = $pterodactylServer['allocation'];
-
-            $updateServerResponse = $this->pterodactylClient->updateServerBuild($server->pterodactyl_id, $pterodactylServerAllocation, $product);
-            
-            if ($updateServerResponse->failed()) {
-                logger()->error('Failed to update server on Pterodactyl', [
-                    'pterodactyl_id' => $server->pterodactyl_id,
-                    'status' => $updateServerResponse->status(),
-                    'error' => $updateServerResponse->json()
-                ]);
-
-                $server->delete();
-
-                throw new ServerUpgradeException(
-                    sprintf(
-                        'Failed to update server on Pterodactyl: %s',
-                        $updateServerResponse->json()['errors'][0]['detail'] ?? 'Unknown error'
-                    )
-                );
-            }
-
             $powerActionResponse = $this->pterodactylClient->powerAction($server, 'restart');
 
             if ($powerActionResponse->failed()) {
@@ -100,8 +82,10 @@ class ServerUpgradeService
             ]);
 
             return $server;
+        } catch (PterodactylException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            throw new ServerUpgradeException($e->getMessage(), $e->getCode() ?: 500, $e);
+            throw new ServerUpgradeException($e->getMessage(), 500, $e);
         }
     }
 
