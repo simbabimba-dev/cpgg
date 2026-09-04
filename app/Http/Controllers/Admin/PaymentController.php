@@ -33,20 +33,22 @@ class PaymentController extends Controller
 {
     const BUY_PERMISSION = 'user.shop.buy';
     const VIEW_PERMISSION = "admin.payments.read";
+    const WRITE_PERMISSION = "admin.payments.write";
 
     use CouponTrait;
 
     /**
      * @return Application|Factory|View
      */
-    public function index(LocaleSettings $locale_settings)
+    public function index(LocaleSettings $locale_settings, GeneralSettings $general_settings)
     {
         $this->checkPermission(self::VIEW_PERMISSION);
 
 
         return view('admin.payments.index')->with([
             'payments' => Payment::paginate(15),
-            'locale_datatables' => $locale_settings->datatables
+            'locale_datatables' => $locale_settings->datatables,
+            'credits_display_name' => $general_settings->credits_display_name,
         ]);
     }
 
@@ -71,14 +73,34 @@ class PaymentController extends Controller
                 $extensionName = basename($extension);
 
                 $extensionSettings = ExtensionHelper::getExtensionSettings($extensionName);
-                if ($extensionSettings->enabled == false) continue;
-
+                if (!$extensionSettings || !($extensionSettings->enabled ?? false)) {
+                    continue;
+                }
 
                 $payment = new \stdClass();
-                $payment->name = ExtensionHelper::getExtensionConfig($extensionName, 'name');
+                $payment->name = ExtensionHelper::getExtensionConfig($extensionName, 'name') ?? $extensionName;
                 $payment->image = asset('images/Extensions/PaymentGateways/' . strtolower($extensionName) . '_logo.png');
+                $payment->available = true;
+                $payment->unavailable_reason = null;
+
+                $extensionClass = ExtensionHelper::getExtensionClass($extensionName);
+                if ($extensionClass && class_exists($extensionClass) && method_exists($extensionClass, 'isAvailableForCheckout')) {
+                    $totalPrice = (float) $currencyHelper->convertForDisplay($shopProduct->getTotalPrice());
+                    $availability = $extensionClass::isAvailableForCheckout($shopProduct->currency_code, $totalPrice);
+                    $payment->available = $availability['available'];
+                    $payment->unavailable_reason = $availability['reason'];
+                }
+
+                $payment->fee_config = $extensionClass::getFeeConfig();
+                $payment->fee_description = $extensionClass::getFeeDescription($shopProduct->currency_code);
+
                 $paymentGateways[] = $payment;
             }
+        }
+
+        $gatewayFeeConfigs = [];
+        foreach ($paymentGateways as $gateway) {
+            $gatewayFeeConfigs[$gateway->name] = $gateway->fee_config ?? [];
         }
 
         return view('store.checkout')->with([
@@ -90,6 +112,7 @@ class PaymentController extends Controller
             'taxpercent' => $shopProduct->getTaxPercent(),
             'total' => $shopProduct->getTotalPrice(),
             'paymentGateways'   => $paymentGateways,
+            'gatewayFeeConfigs' => $gatewayFeeConfigs,
             'productIsFree' => $price <= 0,
             'credits_display_name' => $general_settings->credits_display_name,
             'isCouponsEnabled' => $coupon_settings->enabled,
@@ -101,7 +124,7 @@ class PaymentController extends Controller
      * @param  ShopProduct  $shopProduct
      * @return RedirectResponse
      */
-    public function handleFreeProduct(ShopProduct $shopProduct)
+    public function handleFreeProduct(ShopProduct $shopProduct, GeneralSettings $general_settings, ?string $couponCode = null)
     {
         /** @var User $user */
         $user = Auth::user();
@@ -114,13 +137,18 @@ class PaymentController extends Controller
             'type' => $shopProduct->type,
             'status' => PaymentStatus::PAID,
             'amount' => $shopProduct->quantity,
-            'price' => $shopProduct->price - ($shopProduct->price * PartnerDiscount::getDiscount() / 100),
-            'tax_value' => $shopProduct->getTaxValue(),
-            'tax_percent' => $shopProduct->getTaxPercent(),
-            'total_price' => $shopProduct->getTotalPrice(),
+            'price' => 0,
+            'tax_value' => 0,
+            'tax_percent' => 0,
+            'total_price' => 0,
             'currency_code' => $shopProduct->currency_code,
             'shop_item_product_id' => $shopProduct->id,
+            'coupon_code' => $couponCode,
         ]);
+
+        if ($couponCode) {
+            event(new CouponUsedEvent($couponCode, $user));
+        }
 
         event(new UserUpdateCreditsEvent($user));
         event(new PaymentEvent($user, $payment, $shopProduct));
@@ -128,34 +156,77 @@ class PaymentController extends Controller
         //not sending an invoice
 
         //redirect back to home
-        return redirect()->route('home')->with('success', __('Your credit balance has been increased!'));
+        return redirect()->route('home')->with('success', __('Your :credits balance has been increased!', ['credits' => $general_settings->credits_display_name]));
     }
 
-    public function pay(Request $request)
+    public function pay(Request $request, GeneralSettings $general_settings)
     {
+        $request->validate([
+            'product_id' => ['required', 'exists:shop_products,id'],
+            'payment_method' => ['nullable', 'string', 'max:191'],
+            'coupon_code' => ['nullable', 'string', 'max:191'],
+        ]);
+
         try {
             $user = Auth::user();
             $user = User::findOrFail($user->id);
-            $productId = $request->product_id;
+            $productId = $request->input('product_id');
             $shopProduct = ShopProduct::findOrFail($productId);
 
-            $paymentGateway = $request->payment_method;
-            $couponCode = $request->coupon_code;
+            $paymentGateway = $request->input('payment_method');
+            $couponCode = $request->input('coupon_code');
 
-            $subtotal = $shopProduct->getTotalPrice();
+            $discountedPrice = $shopProduct->getPriceAfterDiscount();
 
-            // Apply Coupon
+            // Apply Coupon to the pre-tax discounted price. The tax is
+            // recalculated afterwards, so the total is price - discount + tax + fee.
             if ($couponCode) {
                 if ($this->isCouponValid($couponCode, $user, $shopProduct->id)) {
-                    $subtotal = $this->applyCoupon($couponCode, $subtotal);
-
-                    event(new CouponUsedEvent($couponCode));
+                    $discountedPrice = $this->applyCoupon($couponCode, $discountedPrice);
+                } else {
+                    $couponCode = null;
                 }
             }
 
-            if ($subtotal <= 0) {
-                return $this->handleFreeProduct($shopProduct);
+            if ($discountedPrice <= 0) {
+                return $this->handleFreeProduct($shopProduct, $general_settings, $couponCode);
             }
+
+            $taxValue = $discountedPrice * $shopProduct->getTaxPercent() / 100;
+            $subtotal = $discountedPrice + $taxValue;
+
+            $enabledPaymentGateways = [];
+            $extensions = ExtensionHelper::getAllExtensionsByNamespace('PaymentGateways');
+            foreach ($extensions as $extension) {
+                $extensionName = basename($extension);
+                $extensionSettings = ExtensionHelper::getExtensionSettings($extensionName);
+
+                if ($extensionSettings && ($extensionSettings->enabled ?? false)) {
+                    $enabledPaymentGateways[] = $extensionName;
+                }
+            }
+
+            if (!in_array($paymentGateway, $enabledPaymentGateways, true)) {
+                return redirect()->route('checkout', $shopProduct)->with('error', __('The selected payment gateway is unavailable'));
+            }
+
+            $paymentGatewayExtension = ExtensionHelper::getExtensionClass($paymentGateway);
+            if (!$paymentGatewayExtension || !class_exists($paymentGatewayExtension)) {
+                return redirect()->route('checkout', $shopProduct)->with('error', __('The selected payment gateway is unavailable'));
+            }
+
+            $availability = $paymentGatewayExtension::isAvailableForCheckout(
+                $shopProduct->currency_code,
+                (float) app(CurrencyHelper::class)->convertForDisplay($subtotal)
+            );
+            if (!$availability['available']) {
+                return redirect()->route('checkout', $shopProduct)->with('error', $availability['reason']);
+            }
+
+            // Calculate the payment processing fee for this gateway and charge it
+            // on top of the product total.
+            $fee = $paymentGatewayExtension::getPaymentFee((int) $subtotal, $shopProduct->currency_code);
+            $totalPrice = $subtotal + $fee;
 
             // create a new payment
             $payment = Payment::create([
@@ -166,18 +237,24 @@ class PaymentController extends Controller
                 'status' => PaymentStatus::OPEN,
                 'amount' => $shopProduct->quantity,
                 'price' => $shopProduct->price,
-                'tax_value' => $shopProduct->getTaxValue(),
+                'tax_value' => $taxValue,
                 'tax_percent' => $shopProduct->getTaxPercent(),
-                'total_price' => $subtotal,
+                'total_price' => $totalPrice,
+                'fee' => $fee,
                 'currency_code' => $shopProduct->currency_code,
                 'shop_item_product_id' => $shopProduct->id,
+                'coupon_code' => $couponCode,
             ]);
 
-            $paymentGatewayExtension = ExtensionHelper::getExtensionClass($paymentGateway);
-            $redirectUrl = $paymentGatewayExtension::getRedirectUrl($payment, $shopProduct, $subtotal);
+            $redirectUrl = $paymentGatewayExtension::getRedirectUrl($payment, $shopProduct, $totalPrice);
 
         } catch (Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('Payment checkout failed', [
+                'user_id' => Auth::id(),
+                'product_id' => $request->input('product_id'),
+                'payment_method' => $request->input('payment_method'),
+                'error' => $e->getMessage(),
+            ]);
             return redirect()->route('store.index')->with('error', __('Oops, something went wrong! Please try again later.'));
         }
 
@@ -199,6 +276,8 @@ class PaymentController extends Controller
      */
     public function dataTable()
     {
+        $this->checkPermission(self::VIEW_PERMISSION);
+
         $query = Payment::with('user');
 
         return datatables($query)
@@ -208,6 +287,9 @@ class PaymentController extends Controller
             })
             ->editColumn('amount', function (Payment $payment, CurrencyHelper $currencyHelper) {
                 return $payment->type == 'Credits' ? $currencyHelper->formatForDisplay($payment->amount) : $payment->amount;
+            })
+            ->editColumn('type', function (Payment $payment, GeneralSettings $general_settings) {
+                return $payment->type == 'Credits' ? $general_settings->credits_display_name : $payment->type;
             })
             ->editColumn('price', function (Payment $payment, CurrencyHelper $currencyHelper) {
                 return $currencyHelper->formatToCurrency($payment->price, $payment->currency_code);
@@ -221,6 +303,9 @@ class PaymentController extends Controller
             ->editColumn('total_price', function (Payment $payment, CurrencyHelper $currencyHelper) {
                 return $currencyHelper->formatToCurrency($payment->total_price, $payment->currency_code);
             })
+            ->editColumn('fee', function (Payment $payment, CurrencyHelper $currencyHelper) {
+                return (int) $payment->fee > 0 ? $currencyHelper->formatToCurrency($payment->fee, $payment->currency_code) : '-';
+            })
             ->editColumn('created_at', function (Payment $payment) {
                 return [
                     'display' => $payment->created_at ? $payment->created_at->diffForHumans() : '',
@@ -230,13 +315,81 @@ class PaymentController extends Controller
             ->addColumn('actions', function (Payment $payment) {
                 $invoice = Invoice::where('payment_id', '=', $payment->payment_id)->first();
 
+                $actions = '';
                 if ($invoice && File::exists(storage_path('app/invoice/' . $invoice->invoice_user . '/' . $invoice->created_at->format('Y') . '/' . $invoice->invoice_name . '.pdf'))) {
-                    return '<a data-content="' . __('Download') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.invoices.downloadSingleInvoice', ['id' => $payment->payment_id]) . '" class="mr-1 text-white btn btn-sm btn-info"><i class="fas fa-file-download"></i></a>';
-                } else {
-                    return '';
+                    $actions .= '<a data-content="' . __('Download') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.invoices.downloadSingleInvoice', ['id' => $payment->payment_id]) . '" class="mr-1 text-white btn btn-sm btn-info"><i class="fas fa-file-download"></i></a>';
                 }
+
+                if ($payment->status !== PaymentStatus::PAID && $payment->status !== PaymentStatus::CANCELED) {
+                    $actions .= '<button type="button" class="mr-1 btn btn-sm btn-success" data-toggle="popover" data-trigger="hover" data-placement="top" data-content="' . __('Force Confirm') . '" onclick="confirmStatusUpdate(\'' . route('admin.payments.statusUpdate', $payment->id) . '\')"><i class="fas fa-check"></i></button>';
+
+                    $extensionClass = ExtensionHelper::getExtensionClass($payment->payment_method);
+                    if ($extensionClass && class_exists($extensionClass) && $extensionClass::supportsRecheck()) {
+                        $actions .= '<form method="POST" action="' . route('admin.payments.recheck', $payment->id) . '" style="display:inline-block;">' . csrf_field() . '<button type="submit" class="mr-1 btn btn-sm btn-primary" data-toggle="popover" data-trigger="hover" data-placement="top" data-content="' . __('Recheck') . '"><i class="fas fa-sync"></i></button></form>';
+                    }
+                }
+
+                return $actions;
             })
             ->rawColumns(['actions', 'user'])
             ->make(true);
+    }
+
+    public function statusUpdate(Payment $payment)
+    {
+        $this->checkPermission(self::WRITE_PERMISSION);
+
+        // TODO: In the future, we could add a status parameter to allow switching to any status (canceled, processing, etc.)
+        if ($payment->status === PaymentStatus::PAID) {
+            return redirect()->route('admin.payments.index')->with('error', __('Payment is already paid.'));
+        }
+
+        $payment->status = PaymentStatus::PAID;
+        $payment->save();
+
+        $user = User::findOrFail($payment->user_id);
+        $shopProduct = ShopProduct::findOrFail($payment->shop_item_product_id);
+
+        if ($payment->coupon_code) {
+            event(new CouponUsedEvent($payment->coupon_code, $user));
+        }
+
+        try {
+            $user->notify(new \App\Notifications\ConfirmPaymentNotification($payment));
+        } catch (Exception $e) {
+            Log::error('Force confirm notification failed: ' . $e->getMessage());
+        }
+
+        event(new PaymentEvent($user, $payment, $shopProduct));
+        event(new UserUpdateCreditsEvent($user));
+
+        return redirect()->route('admin.payments.index')->with('success', __('Payment status updated successfully.'));
+    }
+
+    public function recheck(Payment $payment)
+    {
+        $this->checkPermission(self::WRITE_PERMISSION);
+
+        $extensionClass = ExtensionHelper::getExtensionClass($payment->payment_method);
+        if (!$extensionClass || !class_exists($extensionClass)) {
+            return redirect()->route('admin.payments.index')->with('error', __('Payment extension not found.'));
+        }
+
+        if (!$extensionClass::supportsRecheck()) {
+            return redirect()->route('admin.payments.index')->with('error', __('This payment gateway does not support recheck.'));
+        }
+
+        try {
+            $extensionClass::recheckPayment($payment);
+        } catch (Exception $e) {
+            return redirect()->route('admin.payments.index')->with('error', __('Recheck failed: ') . $e->getMessage());
+        }
+
+        $payment->refresh();
+        if ($payment->status === PaymentStatus::PAID) {
+            return redirect()->route('admin.payments.index')->with('success', __('Payment confirmed after recheck.'));
+        }
+
+        return redirect()->route('admin.payments.index')->with('info', __('Payment status rechecked, but it is still: ') . $payment->status->value);
     }
 }

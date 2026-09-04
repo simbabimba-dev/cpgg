@@ -16,7 +16,7 @@
     <meta
             content='{{ \Illuminate\Support\Facades\Storage::disk('public')->exists('logo.png') ? asset('storage/logo.png') : asset('images/ctrlpanel_logo.png') }}'
             property="og:image">
-    <title>{{ config('app.name', 'Laravel') }}</title>
+    <title>{{ config('app.name', 'CtrlPanel.gg') }}</title>
     <link rel="icon"
           href="{{ \Illuminate\Support\Facades\Storage::disk('public')->exists('favicon.ico') ? asset('storage/favicon.ico') : asset('favicon.ico') }}"
           type="image/x-icon">
@@ -41,6 +41,7 @@
     <noscript>
         <link rel="stylesheet" href="{{ asset('plugins/fontawesome-free/css/all.min.css') }}">
     </noscript>
+    @captchaScripts
     <script src="{{ asset('js/app.js') }}"></script>
     <!-- tinymce -->
     <script src="{{ asset('plugins/tinymce/js/tinymce/tinymce.min.js') }}"></script>
@@ -48,6 +49,8 @@
         #userDropdown.dropdown-toggle::after {
             display: none !important;
         }
+
+        [x-cloak] { display: none !important; }
     </style>
     @vite('themes/default/sass/app.scss')
 </head>
@@ -167,7 +170,7 @@
         <a href="{{ route('home') }}" class="brand-link">
             <img width="64" height="64"
                  src="{{ \Illuminate\Support\Facades\Storage::disk('public')->exists('icon.png') ? asset('storage/icon.png') : asset('images/ctrlpanel_logo.png') }}"
-                 alt="{{ config('app.name', 'Laravel') }} Logo" class="brand-image img-circle"
+                 alt="{{ config('app.name', 'CtrlPanel.gg') }} Logo" class="brand-image img-circle"
                  style="opacity: .8">
             <span class="brand-text font-weight-light">{{ config('app.name', 'CtrlPanel.gg') }}</span>
         </a>
@@ -223,7 +226,6 @@
                     @endif
 
                     @canany(array_merge(
-                        PermissionGroups::TICKET_PERMISSIONS,
                         PermissionGroups::OVERVIEW_PERMISSIONS,
                         PermissionGroups::TICKET_ADMIN_PERMISSIONS,
                         PermissionGroups::TICKET_BLACKLIST_PERMISSIONS,
@@ -454,30 +456,37 @@
         @yield('content')
 
         @include('modals.redeem_voucher_modal')
+        @stack('modals')
     </div>
     <!-- /.content-wrapper -->
-    <footer class="main-footer">
-        <strong>Copyright &copy; 2021-{{ date('Y') }} <a
-                    href="{{ url('/') }}">{{ config('app.name', "Ctrlpanel.gg") }}</a>.</strong>
-        All rights
-        reserved. Powered by <a href="https://CtrlPanel.gg">CtrlPanel</a>.
-        @if (!str_contains(config('BRANCHNAME'), 'main') && !str_contains(config('BRANCHNAME'), 'unknown'))
-            Version <b>{{ config('app')['version'] }} - {{ config('BRANCHNAME') }}</b>
-        @endif
-
-        {{-- Show imprint and privacy link --}}
-        <div class="float-right d-none d-sm-inline-block">
-            @if ($website_settings->show_imprint)
-                <a target="_blank" href="{{ route('terms', 'imprint') }}"><strong>{{ __('Imprint') }}</strong></a> |
-            @endif
-            @if ($website_settings->show_privacy)
-                <a target="_blank" href="{{ route('terms', 'privacy') }}"><strong>{{ __('Privacy') }}</strong></a>
-            @endif
-            @if ($website_settings->show_tos)
-                | <a target="_blank"
-                     href="{{ route('terms', 'tos') }}"><strong>{{ __('Terms of Service') }}</strong></a>
-            @endif
+    <footer class="main-footer d-flex justify-content-between">
+        {{-- Copyright section --}}
+        <div class="d-inline-block">
+            Copyright &copy; {{ date('Y') }} <a href="{{ url('/') }}"><b>{{ config('app.name', "Ctrlpanel.gg") }}</b></a>.
+            All rights reserved.
+            Powered by <a href="https://CtrlPanel.gg"><b>CtrlPanel</b></a> &copy; 2021-{{ date('Y') }}.
         </div>
+
+        @if ($website_settings->show_imprint || $website_settings->show_privacy || $website_settings->show_tos)
+            {{-- Show imprint and privacy link --}}
+            <div class="d-none d-sm-inline-block">
+                @if ($website_settings->show_imprint)
+                    <a target="_blank" href="{{ route('terms', 'imprint') }}"><strong>{{ __('Imprint') }}</strong></a>
+                @endif
+                @if ($website_settings->show_imprint && $website_settings->show_privacy || $website_settings->show_imprint && $website_settings->show_tos)
+                    |
+                @endif
+                @if ($website_settings->show_privacy)
+                    <a target="_blank" href="{{ route('terms', 'privacy') }}"><strong>{{ __('Privacy') }}</strong></a>
+                @endif
+                @if ($website_settings->show_privacy && $website_settings->show_tos)
+                    |
+                @endif
+                @if ($website_settings->show_tos)
+                    <a target="_blank" href="{{ route('terms', 'tos') }}"><strong>{{ __('Terms of Service') }}</strong></a>
+                @endif
+            </div>
+        @endif
     </footer>
 
     <!-- Control Sidebar -->
@@ -529,61 +538,65 @@
         });
     })
 </script>
+@stack('scripts')
 <script>
-    @if (Session::has('error'))
-    Swal.fire({
-        icon: 'error',
-        title: 'Oops...',
-        html: '{{ Session::get('error') }}',
-    })
-    @endif
-    @if (Session::has('success'))
-    Swal.fire({
-        icon: 'success',
-        title: '{{ Session::get('success') }}',
-        position: 'top-end',
-        showConfirmButton: false,
-        background: '#343a40',
-        toast: true,
-        timer: 3000,
-        timerProgressBar: true,
-        didOpen: (toast) => {
-            toast.addEventListener('mouseenter', Swal.stopTimer)
-            toast.addEventListener('mouseleave', Swal.resumeTimer)
-        }
-    })
-    @endif
-    @if (Session::has('info'))
-    Swal.fire({
-        icon: 'info',
-        title: '{{ Session::get('info') }}',
-        position: 'top-end',
-        showConfirmButton: false,
-        background: '#343a40',
-        toast: true,
-        timer: 3000,
-        timerProgressBar: true,
-        didOpen: (toast) => {
-            toast.addEventListener('mouseenter', Swal.stopTimer)
-            toast.addEventListener('mouseleave', Swal.resumeTimer)
-        }
-    })
-    @endif
-    @if (Session::has('warning'))
-    Swal.fire({
-        icon: 'warning',
-        title: '{{ Session::get('warning') }}',
-        position: 'top-end',
-        showConfirmButton: false,
-        background: '#343a40',
-        toast: true,
-        timer: 3000,
-        timerProgressBar: true,
-        didOpen: (toast) => {
-            toast.addEventListener('mouseenter', Swal.stopTimer)
-            toast.addEventListener('mouseleave', Swal.resumeTimer)
-        }
-    })
+    @if (!isset($suppressSweetAlert2))
+        @if (Session::has('error'))
+        Swal.fire({
+            icon: 'error',
+            title: 'Oops...',
+            html: '{{ Session::get('error') }}',
+        })
+        @endif
+        @if (Session::has('success'))
+        Swal.fire({
+            icon: 'success',
+            title: '{{ Session::get('success') }}',
+            position: 'top-end',
+            showConfirmButton: false,
+            background: '#343a40',
+            toast: true,
+            timer: 3000,
+            timerProgressBar: true,
+            didOpen: (toast) => {
+                toast.addEventListener('mouseenter', Swal.stopTimer)
+                toast.addEventListener('mouseleave', Swal.resumeTimer)
+                toast.addEventListener('click', () => Swal.close())
+            }
+        })
+        @endif
+        @if (Session::has('info'))
+        Swal.fire({
+            icon: 'info',
+            title: '{{ Session::get('info') }}',
+            position: 'top-end',
+            showConfirmButton: false,
+            background: '#343a40',
+            toast: true,
+            timer: 3000,
+            timerProgressBar: true,
+            didOpen: (toast) => {
+                toast.addEventListener('mouseenter', Swal.stopTimer)
+                toast.addEventListener('mouseleave', Swal.resumeTimer)
+            }
+        })
+        @endif
+        @if (Session::has('warning'))
+        Swal.fire({
+            icon: 'warning',
+            title: '{{ Session::get('warning') }}',
+            position: 'top-end',
+            showConfirmButton: false,
+            background: '#343a40',
+            toast: true,
+            timer: 3000,
+            timerProgressBar: true,
+            didOpen: (toast) => {
+                toast.addEventListener('mouseenter', Swal.stopTimer)
+                toast.addEventListener('mouseleave', Swal.resumeTimer)
+            }
+        })
+        @endif
     @endif
 </script>
 </body>

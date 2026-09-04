@@ -10,7 +10,6 @@ use App\Models\Pterodactyl\Nest;
 use App\Models\Product;
 use App\Settings\GeneralSettings;
 use App\Settings\LocaleSettings;
-use App\Settings\UserSettings;
 use Exception;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
@@ -60,10 +59,10 @@ class ProductController extends Controller
     public function clone(Product $product, GeneralSettings $general_settings)
     {
         $this->checkPermission(self::WRITE_PERMISSION);
-        
+
         return view('admin.products.create', [
             'product' => $product,
-            'credits_display_name' =>  $general_settings->credits_display_name,
+            'credits_display_name' => $general_settings->credits_display_name,
             'locations' => Location::with('nodes')->get(),
             'nests' => Nest::with('eggs')->get(),
         ]);
@@ -77,15 +76,17 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
+        $this->checkPermission(self::WRITE_PERMISSION);
+
         $request->validate([
             'name' => 'required|max:30',
-            'price' => 'required|numeric|max:1000000|min:0',
-            'memory' => 'required|numeric|max:1000000|min:5',
+            'price' => 'required|numeric|max:9223372036854775|min:0',
+            'memory' => 'required|numeric|max:1000000|min:0',
             'cpu' => 'required|numeric|max:1000000|min:0',
-            'swap' => 'required|numeric|max:1000000|min:0',
+            'swap' => ['required', $this->getSwapValidator()],
             'description' => 'required|string|max:191',
-            'disk' => 'required|numeric|max:1000000|min:5',
-            'minimum_credits' => 'nullable|numeric|max:1000000',
+            'disk' => 'required|numeric|max:1000000|min:0',
+            'minimum_credits' => 'nullable|numeric|max:9223372036854775|gte:price',
             'io' => 'required|numeric|max:1000000|min:0',
             'serverlimit' => 'required|numeric|max:1000000|min:0',
             'databases' => 'required|numeric|max:1000000|min:0',
@@ -100,8 +101,8 @@ class ProductController extends Controller
         ]);
 
 
-        $disabled = ! is_null($request->input('disabled'));
-        $oomkiller = ! is_null($request->input('oom_killer'));
+        $disabled = !is_null($request->input('disabled'));
+        $oomkiller = !is_null($request->input('oom_killer'));
         $product = Product::create(array_merge($request->all(), ['disabled' => $disabled, 'oom_killer' => $oomkiller]));
 
         //link nodes and eggs
@@ -117,13 +118,12 @@ class ProductController extends Controller
      * @param  Product  $product
      * @return Application|Factory|View
      */
-    public function show(Product $product, UserSettings $user_settings, GeneralSettings $general_settings)
+    public function show(Product $product, GeneralSettings $general_settings)
     {
-        $this->checkAnyPermission([self::READ_PERMISSION,self::WRITE_PERMISSION]);
+        $this->checkAnyPermission([self::READ_PERMISSION, self::WRITE_PERMISSION]);
 
         return view('admin.products.show', [
             'product' => $product,
-            'minimum_credits' => $user_settings->min_credits_to_make_server,
             'credits_display_name' => $general_settings->credits_display_name
         ]);
     }
@@ -155,16 +155,18 @@ class ProductController extends Controller
      */
     public function update(Request $request, Product $product): RedirectResponse
     {
+        $this->checkPermission(self::EDIT_PERMISSION);
+
         $request->validate([
             'name' => 'required|max:30',
-            'price' => 'required|numeric|max:1000000|min:0',
-            'memory' => 'required|numeric|max:1000000|min:5',
+            'price' => 'required|numeric|max:9223372036854775|min:0',
+            'memory' => 'required|numeric|max:1000000|min:0',
             'cpu' => 'required|numeric|max:1000000|min:0',
-            'swap' => 'required|numeric|max:1000000|min:0',
+            'swap' => ['required', $this->getSwapValidator()],
             'description' => 'required|string|max:191',
-            'disk' => 'required|numeric|max:1000000|min:5',
+            'disk' => 'required|numeric|max:1000000|min:0',
             'io' => 'required|numeric|max:1000000|min:0',
-            'minimum_credits' => 'nullable|numeric|max:1000000',
+            'minimum_credits' => 'nullable|numeric|max:9223372036854775|gte:price',
             'databases' => 'required|numeric|max:1000000|min:0',
             'serverlimit' => 'required|numeric|max:1000000|min:0',
             'backups' => 'required|numeric|max:1000000|min:0',
@@ -177,8 +179,8 @@ class ProductController extends Controller
             'default_billing_priority' => ['required', new Enum(BillingPriority::class)]
         ]);
 
-        $disabled = ! is_null($request->input('disabled'));
-        $oomkiller = ! is_null($request->input('oom_killer'));
+        $disabled = !is_null($request->input('disabled'));
+        $oomkiller = !is_null($request->input('oom_killer'));
         $product->update(array_merge($request->all(), ['disabled' => $disabled, 'oom_killer' => $oomkiller]));
 
         //link nodes and eggs
@@ -199,7 +201,7 @@ class ProductController extends Controller
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
-        $product->update(['disabled' => ! $product->disabled]);
+        $product->update(['disabled' => !$product->disabled]);
 
         return redirect()->route('admin.products.index')->with('success', 'Product has been updated!');
     }
@@ -231,19 +233,21 @@ class ProductController extends Controller
      */
     public function dataTable()
     {
+        $this->checkPermission(self::READ_PERMISSION);
+
         $query = Product::with(['servers']);
 
         return datatables($query)
             ->addColumn('actions', function (Product $product) {
                 return '
-                            <a data-content="'.__('Show').'" data-toggle="popover" data-trigger="hover" data-placement="top" href="'.route('admin.products.show', $product->id).'" class="mr-1 text-white btn btn-sm btn-warning"><i class="fas fa-eye"></i></a>
-                            <a data-content="'.__('Clone').'" data-toggle="popover" data-trigger="hover" data-placement="top" href="'.route('admin.products.clone', $product->id).'" class="mr-1 text-white btn btn-sm btn-primary"><i class="fas fa-clone"></i></a>
-                            <a data-content="'.__('Edit').'" data-toggle="popover" data-trigger="hover" data-placement="top" href="'.route('admin.products.edit', $product->id).'" class="mr-1 btn btn-sm btn-info"><i class="fas fa-pen"></i></a>
+                            <a data-content="' . __('Show') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.products.show', $product->id) . '" class="mr-1 text-white btn btn-sm btn-warning"><i class="fas fa-eye"></i></a>
+                            <a data-content="' . __('Clone') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.products.clone', $product->id) . '" class="mr-1 text-white btn btn-sm btn-primary"><i class="fas fa-clone"></i></a>
+                            <a data-content="' . __('Edit') . '" data-toggle="popover" data-trigger="hover" data-placement="top" href="' . route('admin.products.edit', $product->id) . '" class="mr-1 btn btn-sm btn-info"><i class="fas fa-pen"></i></a>
 
-                           <form class="d-inline" onsubmit="return submitResult();" method="post" action="'.route('admin.products.destroy', $product->id).'">
-                            '.csrf_field().'
-                            '.method_field('DELETE').'
-                           <button data-content="'.__('Delete').'" data-toggle="popover" data-trigger="hover" data-placement="top" class="mr-1 btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                           <form class="d-inline" onsubmit="return submitResult(this);" method="post" action="' . route('admin.products.destroy', $product->id) . '">
+                            ' . csrf_field() . '
+                            ' . method_field('DELETE') . '
+                           <button data-content="' . __('Delete') . '" data-toggle="popover" data-trigger="hover" data-placement="top" class="mr-1 btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
                        </form>
                 ';
             })
@@ -261,12 +265,12 @@ class ProductController extends Controller
                 $checked = $product->disabled == false ? 'checked' : '';
 
                 return '
-                    <form class="d-inline" onsubmit="return submitResult();" method="post" action="'.route('admin.products.disable', $product->id).'">
-                        '.csrf_field().'
-                        '.method_field('PATCH').'
+                    <form class="d-inline" method="post" action="' . route('admin.products.disable', $product->id) . '">
+                        ' . csrf_field() . '
+                        ' . method_field('PATCH') . '
                         <div class="custom-control custom-switch">
-                        <input '.$checked.' name="disabled" onchange="this.form.submit()" type="checkbox" class="custom-control-input" id="switch'.$product->id.'">
-                        <label class="custom-control-label" for="switch'.$product->id.'"></label>
+                        <input ' . $checked . ' name="disabled" onchange="this.form.submit()" type="checkbox" class="custom-control-input" id="switch' . $product->id . '">
+                        <label class="custom-control-label" for="switch' . $product->id . '"></label>
                         </div>
                     </form>
                 ';
@@ -274,11 +278,27 @@ class ProductController extends Controller
             ->editColumn('price', function (Product $product, CurrencyHelper $currencyHelper) {
                 return $currencyHelper->formatForDisplay($product->price);
             })
-            ->editColumn('minimum_credits', function (Product $product, UserSettings $user_settings, CurrencyHelper $currencyHelper) {
-                return $product->minimum_credits ? $currencyHelper->formatForDisplay($product->minimum_credits) : $currencyHelper->formatForDisplay($user_settings->min_credits_to_make_server);
+            ->editColumn('minimum_credits', function (Product $product, CurrencyHelper $currencyHelper) {
+                // use price if stored value is null or less than price (covers legacy -1)
+                $value = (is_null($product->minimum_credits) || $product->minimum_credits < $product->price)
+                    ? $product->price
+                    : $product->minimum_credits;
+                return $currencyHelper->formatForDisplay($value);
             })
             ->editColumn('serverlimit', function (Product $product) {
                 return $product->serverlimit == 0 ? "∞" : $product->serverlimit;
+            })
+            ->editColumn('memory', function (Product $product) {
+                return $product->memory == 0 ? "∞" : $product->memory;
+            })
+            ->editColumn('cpu', function (Product $product) {
+                return $product->cpu == 0 ? "∞" : $product->cpu;
+            })
+            ->editColumn('swap', function (Product $product) {
+                return $product->swap == -1 ? "∞" : $product->swap;
+            })
+            ->editColumn('disk', function (Product $product) {
+                return $product->disk == 0 ? "∞" : $product->disk;
             })
             ->editColumn('oom_killer', function (Product $product) {
                 return $product->oom_killer ? __("enabled") : __("disabled");
@@ -288,5 +308,32 @@ class ProductController extends Controller
             })
             ->rawColumns(['actions', 'disabled'])
             ->make();
+    }
+
+    /**
+     * Allow -1 (unlimited), 0 (disabled), or a positive integer.
+     */
+    private function getSwapValidator(): callable
+    {
+        return function ($attribute, $value, $fail) {
+            // valid values: -1 (unlimited), 0 (disabled), or a positive integer within column range
+            if ($value === null) {
+                return;
+            }
+
+            if ($value == -1 || $value == 0) {
+                return;
+            }
+
+            if (!ctype_digit((string) $value)) {
+                $fail(__('Swap must be -1 for unlimited, 0 for disabled, or a positive integer.'));
+                return;
+            }
+
+            $int = (int) $value;
+            if ($int < 1 || $int > 1000000) {
+                $fail(__('Swap must be -1 for unlimited, 0 for disabled, or a positive integer up to :max.', ['max' => 1000000]));
+            }
+        };
     }
 }

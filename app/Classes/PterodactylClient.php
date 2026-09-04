@@ -220,12 +220,15 @@ class PterodactylClient
     /**
      * @param  Node  $node
      * @return array|mixed|null
-     *
-     * @throws Exception
      */
     public function getFreeAllocations(Node $node)
     {
-        $response = self::getAllocations($node);
+        try {
+            $response = $this->getAllocations($node);
+        } catch (\Exception $e) {
+            return [];
+        }
+
         $freeAllocations = [];
 
         if (isset($response['data'])) {
@@ -242,6 +245,46 @@ class PterodactylClient
     }
 
     /**
+     * Check whether a node has reached its allocation limit.
+     *
+     * The allocation limit is a per-node setting: it caps the number of
+     * allocations that may be in use on a single node. When the amount of
+     * assigned allocations on the node meets or exceeds the limit, no new
+     * servers can be deployed to that node (but other nodes in the same
+     * location remain eligible).
+     *
+     * @param  Node  $node
+     * @return bool
+     */
+    public function nodeHasReachedAllocationLimit(Node $node): bool
+    {
+        // A limit of 0 means "no limit", so the node is never blocked.
+        $limit = $node->allocation_limit;
+        if ($limit <= 0) {
+            return false;
+        }
+
+        try {
+            $response = $this->getAllocations($node);
+        } catch (\Exception $e) {
+            return true;
+        }
+
+        if (!isset($response['data']) || empty($response['data'])) {
+            return false;
+        }
+
+        $usedAllocations = 0;
+        foreach ($response['data'] as $allocation) {
+            if ($allocation['attributes']['assigned']) {
+                $usedAllocations++;
+            }
+        }
+
+        return $usedAllocations >= $limit;
+    }
+
+    /**
      * @param  Node  $node
      * @return array|mixed
      *
@@ -250,7 +293,7 @@ class PterodactylClient
     public function getAllocations(Node $node)
     {
         try {
-            $response = $this->application->get("application/nodes/{$node->id}/allocations?per_page={$this->allocation_limit}");
+            $response = $this->application->get("application/nodes/{$node->id}/allocations?per_page={$this->per_page_limit}");
         } catch (Exception $e) {
             throw self::getException($e->getMessage());
         }
@@ -299,6 +342,22 @@ class PterodactylClient
             return $response;
         } catch (Exception $e) {
             throw $e;
+        }
+    }
+
+    /**
+     * Get a server by external_id on Pterodactyl.
+     *
+     * @param string $externalId
+     * @return \Illuminate\Http\Client\Response
+     * @throws Exception
+     */
+    public function getServerByExternalId(string $externalId)
+    {
+        try {
+            return $this->application->get("application/servers/external/{$externalId}");
+        } catch (Exception $e) {
+            throw self::getException('Failed to get server by external_id from pterodactyl - ' . $e->getMessage());
         }
     }
 
@@ -407,6 +466,8 @@ class PterodactylClient
      * @param  Server  $server
      * @param  Product  $product
      * @return Response
+     *
+     * @deprecated Use updateServerBuild instead.
      */
     public function updateServer(Server $server, Product $product)
     {
@@ -428,6 +489,43 @@ class PterodactylClient
     }
 
     /**
+     * Update server build.
+     *
+     * @param  Server  $server
+     * @return Response
+     *
+     * @throws Exception
+     */
+    public function updateServerBuild(string $pterodactylId, int $pterodactylAllocation, Product $product)
+    {
+        try {
+            $response = $this->application->patch("application/servers/{$pterodactylId}/build", [
+                'allocation' => $pterodactylAllocation,
+                'memory' => $product->memory,
+                'swap' => $product->swap,
+                'disk' => $product->disk,
+                'io' => $product->io,
+                'cpu' => $product->cpu,
+                'threads' => null,
+                'oom_disabled' => $product->oom_killer,
+                'feature_limits' => [
+                    'databases' => $product->databases,
+                    'backups' => $product->backups,
+                    'allocations' => $product->allocations,
+                ],
+            ]);
+
+            if ($response->failed()) {
+                throw self::getException('Server not found on Pterodactyl', 404);
+            }
+
+            return $response;
+        } catch (Exception $e) {
+            throw self::getException($e->getMessage());
+        }
+    }
+
+    /**
      * Update the owner of a server
      *
      * @param  int  $userId
@@ -440,6 +538,25 @@ class PterodactylClient
             'name' => $server->name,
             'user' => $userId,
         ]);
+    }
+
+    /**
+     * Update server details
+     *
+     * @param  Server  $server
+     * @param  array  $data
+     * @return Response
+     *
+     * @throws HttpException
+     * @throws Exception
+     */
+    public function updateServerDetails(Server $server, array $data)
+    {
+        try {
+            return $this->application->patch("application/servers/{$server->pterodactyl_id}/details", $data);
+        } catch (Exception $e) {
+            throw self::getException($e->getMessage());
+        }
     }
 
     /**
@@ -495,15 +612,16 @@ class PterodactylClient
     private function getEnvironmentVariables(Egg $egg, $variables)
     {
         $environment = [];
-        $variables = json_decode($variables, true);
+        // Support for front-end and api variables format.
+        $variables = collect(is_string($variables) ? json_decode($variables, true) : $variables);
 
         foreach ($egg->environment as $envVariable) {
-            $matchedVariable = collect($variables)->firstWhere('env_variable', $envVariable['env_variable']);
-
-            $environment[$envVariable['env_variable']] = $matchedVariable
-                ? $matchedVariable['filled_value']
-                : $envVariable['default_value'];
+            if ($envVariable['default_value'] !== null && $envVariable['default_value'] !== '') {
+                $environment[$envVariable['env_variable']] = $envVariable['default_value'];
+            }
         }
+
+        $environment = array_merge($environment, $variables->toArray());
 
         return $environment;
     }

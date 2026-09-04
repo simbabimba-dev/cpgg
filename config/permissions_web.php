@@ -29,6 +29,7 @@ return [
     'Overview Sync' => 'admin.overview.sync',
 
     'View Api Keys' => 'admin.api.read',
+    'View Api Docs Page' => 'admin.api.docs',
     'Manage Api Keys' => 'admin.api.write',
 
     'View User List' => 'admin.users.read',
@@ -74,6 +75,7 @@ return [
 
 
     'View Payments Backend' => 'admin.payments.read',
+    'Manage Payments Backend' => 'admin.payments.write',
 
     'View Partners Backend' => 'admin.partners.read',
     'Manage Partners Backend' => 'admin.partners.write',
