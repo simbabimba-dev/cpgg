@@ -111,7 +111,7 @@ class PaymentController extends Controller
             'taxvalue' => $shopProduct->getTaxValue(),
             'taxpercent' => $shopProduct->getTaxPercent(),
             'total' => $shopProduct->getTotalPrice(),
-            'paymentGateways'   => $paymentGateways,
+            'paymentGateways' => $paymentGateways,
             'gatewayFeeConfigs' => $gatewayFeeConfigs,
             'productIsFree' => $price <= 0,
             'credits_display_name' => $general_settings->credits_display_name,
@@ -355,8 +355,13 @@ class PaymentController extends Controller
 
         // Determine the target status. Defaults to PAID for backward compatibility
         // with the "Force Confirm" action; otherwise it is taken from the request.
-        $status = PaymentStatus::tryFrom($request->input('status', ''));
-        $status ??= PaymentStatus::PAID;
+        $request->validate([
+            'status' => ['nullable', Rule::enum(PaymentStatus::class)],
+        ]);
+
+        $status = $request->has('status')
+            ? PaymentStatus::from($request->input('status'))
+            : PaymentStatus::PAID;
 
         if ($payment->status === $status) {
             return redirect()->route('admin.payments.index')->with('error', __('Payment is already :status.', ['status' => $status->value]));

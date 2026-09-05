@@ -46,14 +46,21 @@ class DiscordJoinFailed extends Notification implements ShouldQueue
     public function toArray($notifiable)
     {
         $userName = e($this->user->name);
+        if ($notifiable->is($this->user)) {
+            $content = "
+                <p>Hello <strong>{$userName}</strong>, we were unable to add you to our Discord server.</p>
+                <p>Please try linking your Discord account again, or contact our support team for assistance.</p>
+            ";
+        } else {
+            $content = "
+                <p>Discord server join failed for <strong>{$userName}</strong>.</p>
+                <p>Please investigate the Discord integration or assist the user.</p>
+            ";
+        }
 
         return [
             'title' => __('Discord Server Join Failed'),
-            'content' => "
-                <p>Hello <strong>{$userName}</strong>, we were unable to add you to our Discord server.</p>
-                <p>Please try linking your Discord account again, or contact our support team for assistance.</p>
-                <p>" . config('app.name', 'CtrlPanel.gg') . '</p>
-            ',
+            'content' => $content . '<p>' . config('app.name', 'CtrlPanel.gg') . '</p>',
         ];
     }
 }

@@ -99,7 +99,13 @@ class SocialiteController extends Controller
                         ->get()
                         ->each(fn(User $admin) => $admin->notify(new \App\Notifications\DiscordJoinFailed($user)));
                 } catch (\Throwable $notifyException) {
-                    logger()->error('Failed to notify about Discord join failure: ' . $notifyException->getMessage());
+                    logger()->error('Failed to notify about Discord join failure', [
+                        'user_id' => $user->id,
+                        'discord_id' => $discord->id,
+                        'guild_id' => $guildId,
+                        'role_id' => $roleId,
+                        'exception' => $notifyException,
+                    ]);
                 }
 
                 return redirect()->route('profile.index')->with(

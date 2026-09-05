@@ -50,7 +50,7 @@ class PermissionsSeeder extends Seeder
     public function createPermissions()
     {
         foreach (config('permissions_web') as $permission_name => $permission_value) {
-            Permission::create(['name' => $permission_value, 'readable_name' => $permission_name]);
+            Permission::firstOrCreate(['name' => $permission_value, 'readable_name' => $permission_name]);
         }
     }
 
