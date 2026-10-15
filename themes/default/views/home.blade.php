@@ -70,7 +70,7 @@
 
 
             <!-- /.col -->
-            @if ($credits > 10 && $usage > 0)
+            @if ($credits > 10 && $usage > 0 && isset($timeLeft))
             <div class="col-12 col-sm-6 col-md">
               <div class="mb-3 info-box">
                         <span class="info-box-icon {{ $timeLeft['bg'] }} elevation-1">
@@ -78,7 +78,7 @@
                         <div class="info-box-content">
                             <span class="info-box-text">{{ $timeLeft['message'] }}
                             </span>
-                            <span class="info-box-number">{{ $timeLeft['value'] }}<sup>{{ $timeLeft['unit'] }}</sup></span>
+                            <span class="info-box-number">{{ $timeLeft['value'] }}</span>
                         </div>
                     </div>
                     <!-- /.info-box -->
@@ -359,6 +359,7 @@
                         didOpen: (toast) => {
                             toast.addEventListener('mouseenter', Swal.stopTimer)
                             toast.addEventListener('mouseleave', Swal.resumeTimer)
+                            toast.addEventListener('click', () => Swal.close())
                         }
                     })
                 })

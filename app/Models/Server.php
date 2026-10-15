@@ -5,6 +5,7 @@ namespace App\Models;
 use Carbon\Carbon;
 use App\Classes\PterodactylClient;
 use App\Enums\BillingPriority;
+use App\Exceptions\Server\ServerDeletionException;
 use App\Settings\PterodactylSettings;
 use GuzzleHttp\Promise\PromiseInterface;
 use Hidehalo\Nanoid\Client;
@@ -14,7 +15,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Http\Client\Response;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
-use Exception;
 
 /**
  * Class Server
@@ -52,16 +52,24 @@ class Server extends Model
     /**
      * @var string[]
      */
+    public const STATUS_PROVISIONING = 'provisioning';
+    public const STATUS_ACTIVE = 'active';
+    public const STATUS_FAILED = 'failed';
+    public const STATUS_PENDING_RECONCILIATION = 'pending_reconciliation';
+
     protected $fillable = [
         "name",
         "description",
         "suspended",
+        "suspension_warning_sent_at",
         "identifier",
         "billing_priority",
         "product_id",
         "pterodactyl_id",
+        "user_id",
         "last_billed",
-        "canceled"
+        "canceled",
+        "status"
     ];
 
     /**
@@ -69,6 +77,8 @@ class Server extends Model
      */
     protected $casts = [
         'suspended' => 'datetime',
+        'last_billed' => 'datetime',
+        'canceled' => 'datetime',
         'billing_priority' => BillingPriority::class
     ];
 
@@ -91,11 +101,15 @@ class Server extends Model
         });
 
         static::deleting(function (Server $server) {
+            if (is_null($server->pterodactyl_id)) {
+                return;
+            }
+
             $response = $server->pterodactyl->application->delete("/application/servers/{$server->pterodactyl_id}");
-            if ($response->failed() && !is_null($server->pterodactyl_id)) {
+            if ($response->failed()) {
                 //only return error when it's not a 404 error
                 if ($response['errors'][0]['status'] != '404') {
-                    throw new Exception($response['errors'][0]['code']);
+                    throw new ServerDeletionException($response['errors'][0]['code']);
                 }
             }
         });
@@ -144,6 +158,7 @@ class Server extends Model
             $this->update([
                 'suspended' => null,
                 'last_billed' => Carbon::now()->toDateTimeString(),
+                'suspension_warning_sent_at' => null,
             ]);
         }
 
