@@ -72,6 +72,14 @@
                                     <div class="text-muted">
                                         {{__('When set, every request is signed with an X-CtrlPanel-Signature header (HMAC-SHA256).')}}
                                     </div>
+                                    @if($webhook->secret)
+                                        <div class="custom-control custom-checkbox mt-2">
+                                            <input type="checkbox" class="custom-control-input" id="clear_secret"
+                                                   name="clear_secret" value="1" @checked(old('clear_secret'))>
+                                            <label class="custom-control-label"
+                                                   for="clear_secret">{{__('Remove the current secret')}}</label>
+                                        </div>
+                                    @endif
                                     @error('secret')
                                     <div class="invalid-feedback">
                                         {{$message}}
@@ -108,6 +116,7 @@
 
                                 <div class="form-group">
                                     <div class="custom-control custom-switch">
+                                        <input type="hidden" name="enabled" value="0">
                                         <input type="checkbox" class="custom-control-input" id="enabled"
                                                name="enabled" value="1"
                                                @checked(old('enabled', $webhook->enabled))>

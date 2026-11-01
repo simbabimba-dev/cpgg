@@ -98,9 +98,9 @@ class User extends Authenticatable implements MustVerifyEmail
         'email_verified_reward' => 'boolean'
     ];
 
-    public function __construct()
+    public function __construct(array $attributes = [])
     {
-        parent::__construct();
+        parent::__construct($attributes);
 
         $ptero_settings = new PterodactylSettings();
         $this->pterodactyl = new PterodactylClient($ptero_settings);

@@ -109,6 +109,7 @@
 
                                 <div class="form-group">
                                     <div class="custom-control custom-switch">
+                                        <input type="hidden" name="enabled" value="0">
                                         <input type="checkbox" class="custom-control-input" id="enabled"
                                                name="enabled" value="1" @checked(old('enabled', true))>
                                         <label class="custom-control-label" for="enabled">{{__('Enabled')}}</label>

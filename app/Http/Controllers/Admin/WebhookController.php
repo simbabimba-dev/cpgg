@@ -55,7 +55,10 @@ class WebhookController extends Controller
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
-        $webhook = Webhook::create($this->validatedData($request));
+        $data = $this->validatedData($request);
+        $data['secret'] = ($data['secret'] ?? null) ?: null;
+
+        $webhook = Webhook::create($data);
 
         return redirect()->route('admin.webhooks.index')
             ->with('success', __('Webhook ":name" has been created!', ['name' => $webhook->name]));
@@ -83,10 +86,17 @@ class WebhookController extends Controller
     {
         $this->checkPermission(self::WRITE_PERMISSION);
 
+        $request->validate([
+            'clear_secret' => ['nullable', 'boolean'],
+        ]);
+
         $data = $this->validatedData($request);
 
-        // An empty secret field means "keep the existing secret".
-        if (empty($data['secret'])) {
+        // An empty secret field means "keep the existing secret" unless the
+        // admin explicitly asked to remove it.
+        if ($request->boolean('clear_secret')) {
+            $data['secret'] = null;
+        } elseif (empty($data['secret'])) {
             unset($data['secret']);
         }
 
@@ -179,7 +189,7 @@ class WebhookController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'url' => ['required', 'url', 'max:2048'],
+            'url' => ['required', 'url:http,https', 'max:2048'],
             'secret' => ['nullable', 'string', 'max:255'],
             'events' => ['required', 'array', 'min:1'],
             'events.*' => ['string', Rule::enum(WebhookEvent::class)],
