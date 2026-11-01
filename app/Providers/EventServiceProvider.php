@@ -11,6 +11,9 @@ use App\Listeners\AssociateDiscordRoles;
 use App\Listeners\CouponUsed;
 use App\Listeners\CreateInvoice;
 use App\Listeners\DisassociateDiscordRoles;
+use App\Listeners\DispatchCouponUsedWebhook;
+use App\Listeners\DispatchPaymentWebhook;
+use App\Listeners\DispatchServerCreatedWebhook;
 use App\Listeners\UnsuspendServers;
 use App\Listeners\UserPayment;
 use App\Listeners\Verified as ListenerVerified;
@@ -37,12 +40,15 @@ class EventServiceProvider extends ServiceProvider
         PaymentEvent::class => [
             UserPayment::class,
             CreateInvoice::class,
+            DispatchPaymentWebhook::class,
         ],
         CouponUsedEvent::class => [
-            CouponUsed::class
+            CouponUsed::class,
+            DispatchCouponUsedWebhook::class,
         ],
         ServerCreatedEvent::class => [
             AssociateDiscordRoles::class,
+            DispatchServerCreatedWebhook::class,
         ],
         ServerDeletedEvent::class => [
             DisassociateDiscordRoles::class,

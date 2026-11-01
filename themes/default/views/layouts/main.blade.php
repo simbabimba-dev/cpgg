@@ -410,7 +410,10 @@
                         @endforeach
                     @endif
 
-                    @canany(PermissionGroups::USEFUL_LINKS_PERMISSIONS)
+                    @canany(array_merge(
+                        PermissionGroups::USEFUL_LINKS_PERMISSIONS,
+                        PermissionGroups::WEBHOOKS_PERMISSIONS
+                    ))
                         <li class="nav-header">{{ __('Other') }}</li>
                     @endcanany
 
@@ -420,6 +423,16 @@
                                class="nav-link @if (Request::routeIs('admin.usefullinks.*')) active @endif">
                                 <i class="nav-icon fas fa-link"></i>
                                 <p>{{ __('Useful Links') }}</p>
+                            </a>
+                        </li>
+                    @endcanany
+
+                    @canany(PermissionGroups::WEBHOOKS_PERMISSIONS)
+                        <li class="nav-item">
+                            <a href="{{ route('admin.webhooks.index') }}"
+                               class="nav-link @if (Request::routeIs('admin.webhooks.*')) active @endif">
+                                <i class="nav-icon fas fa-plug"></i>
+                                <p>{{ __('Webhooks') }}</p>
                             </a>
                         </li>
                     @endcanany

@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use App\Enums\BillingPriority;
+use App\Enums\WebhookEvent;
 use App\Facades\Currency;
 use App\Models\Pterodactyl\Egg;
 use App\Models\Pterodactyl\Node;
+use App\Services\WebhookService;
 use Hidehalo\Nanoid\Client;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -57,6 +59,18 @@ class Product extends Model
         static::deleting(function (Product $product) {
             $product->nodes()->detach();
             $product->eggs()->detach();
+        });
+
+        static::created(function (Product $product) {
+            app(WebhookService::class)->trigger(WebhookEvent::PRODUCT_CREATED, WebhookService::productPayload($product));
+        });
+
+        static::updated(function (Product $product) {
+            app(WebhookService::class)->trigger(WebhookEvent::PRODUCT_UPDATED, WebhookService::productPayload($product));
+        });
+
+        static::deleted(function (Product $product) {
+            app(WebhookService::class)->trigger(WebhookEvent::PRODUCT_DELETED, WebhookService::productPayload($product));
         });
     }
 

@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Events\UserUpdateCreditsEvent;
+use App\Enums\WebhookEvent;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Notifications\DynamicNotification;
 use App\Services\NotificationService;
+use App\Services\WebhookService;
 use App\Settings\LocaleSettings;
 use App\Settings\PterodactylSettings;
 use App\Classes\PterodactylClient;
@@ -313,6 +315,8 @@ class UserController extends Controller
         }
 
         event(new UserUpdateCreditsEvent($user));
+
+        app(WebhookService::class)->trigger(WebhookEvent::USER_UPDATED, WebhookService::userPayload($user));
 
         return redirect()->route('admin.users.index')->with('success', 'User updated!');
     }

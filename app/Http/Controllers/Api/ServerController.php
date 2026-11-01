@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Classes\PterodactylClient;
+use App\Enums\WebhookEvent;
 use App\Events\ServerDeletedEvent;
 use App\Exceptions\Pterodactyl\PterodactylException;
 use App\Exceptions\Server\ServerException;
@@ -19,6 +20,7 @@ use App\Http\Requests\Api\Servers\UpdateServerBuildRequest;
 use App\Http\Requests\Api\Servers\UpdateServerRequest;
 use App\Services\ServerCreationService;
 use App\Services\ServerUpgradeService;
+use App\Services\WebhookService;
 use App\Settings\PterodactylSettings;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
@@ -246,6 +248,8 @@ class ServerController extends Controller
             }
 
             $server->save();
+
+            app(WebhookService::class)->trigger(WebhookEvent::SERVER_UPDATED, WebhookService::serverPayload($server));
 
             return ServerResource::make($server->refresh());
         } catch (Exception $e) {

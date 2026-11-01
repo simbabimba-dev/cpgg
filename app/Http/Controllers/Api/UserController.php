@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Classes\PterodactylClient;
+use App\Enums\WebhookEvent;
 use App\Events\UserUpdateCreditsEvent;
 use App\Helpers\CurrencyHelper;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Notifications\ReferralNotification;
+use App\Services\WebhookService;
 use App\Settings\PterodactylSettings;
 use App\Settings\ReferralSettings;
 use App\Settings\UserSettings;
@@ -208,6 +210,8 @@ class UserController extends Controller
             $user->update($dataPayload);
 
             event(new UserUpdateCreditsEvent($user));
+
+            app(WebhookService::class)->trigger(WebhookEvent::USER_UPDATED, WebhookService::userPayload($user));
 
             return UserResource::make($user);
         } catch (Exception $e) {

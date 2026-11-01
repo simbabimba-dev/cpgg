@@ -73,6 +73,9 @@ return [
     'View Useful Links Backend' => 'admin.useful_links.read',
     'Manage Useful Links Backend' => 'admin.useful_links.write',
 
+    'View Webhooks Backend' => 'admin.webhooks.read',
+    'Manage Webhooks Backend' => 'admin.webhooks.write',
+
 
     'View Payments Backend' => 'admin.payments.read',
     'Manage Payments Backend' => 'admin.payments.write',

@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Exceptions\Pterodactyl\PterodactylException;
 use App\Http\Controllers\Controller;
+use App\Enums\WebhookEvent;
 use App\Models\Server;
 use App\Models\User;
 use App\Services\ServerSyncService;
+use App\Services\WebhookService;
 use App\Settings\DiscordSettings;
 use App\Settings\LocaleSettings;
 use App\Settings\PterodactylSettings;
@@ -148,6 +150,8 @@ class ServerController extends Controller
             $server->identifier = $request->get('identifier');
         }
         $server->save();
+
+        app(WebhookService::class)->trigger(WebhookEvent::SERVER_UPDATED, WebhookService::serverPayload($server));
 
         return redirect()->route('admin.servers.index')->with('success', 'Server updated!');
     }

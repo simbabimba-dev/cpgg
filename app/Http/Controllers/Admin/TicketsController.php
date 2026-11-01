@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Enums\WebhookEvent;
 use App\Models\Server;
 use App\Models\Ticket;
 use App\Models\TicketBlacklist;
@@ -10,6 +11,7 @@ use App\Models\TicketCategory;
 use App\Models\TicketComment;
 use App\Models\User;
 use App\Notifications\Ticket\User\ReplyNotification;
+use App\Services\WebhookService;
 use App\Settings\LocaleSettings;
 use App\Settings\PterodactylSettings;
 use Exception;
@@ -254,6 +256,11 @@ class TicketsController extends Controller
             'status' => 'True',
             'reason' => $request->reason,
         ]);
+
+        app(WebhookService::class)->trigger(WebhookEvent::TICKET_BLACKLISTED, array_merge(
+            WebhookService::userPayload($user),
+            ['reason' => $request->reason]
+        ));
 
         return redirect()->back()->with('success', __('Successfully add User to blacklist, User name: '.$user->name));
     }

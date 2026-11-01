@@ -5,7 +5,9 @@ namespace App\Models;
 use Carbon\Carbon;
 use App\Classes\PterodactylClient;
 use App\Enums\BillingPriority;
+use App\Enums\WebhookEvent;
 use App\Exceptions\Server\ServerDeletionException;
+use App\Services\WebhookService;
 use App\Settings\PterodactylSettings;
 use GuzzleHttp\Promise\PromiseInterface;
 use Hidehalo\Nanoid\Client;
@@ -113,6 +115,10 @@ class Server extends Model
                 }
             }
         });
+
+        static::deleted(function (Server $server) {
+            app(WebhookService::class)->trigger(WebhookEvent::SERVER_DELETED, WebhookService::serverPayload($server));
+        });
     }
 
     /**
@@ -142,6 +148,8 @@ class Server extends Model
             $this->update([
                 'suspended' => now(),
             ]);
+
+            app(WebhookService::class)->trigger(WebhookEvent::SERVER_SUSPENDED, WebhookService::serverPayload($this));
         }
 
         return $this;
@@ -160,6 +168,8 @@ class Server extends Model
                 'last_billed' => Carbon::now()->toDateTimeString(),
                 'suspension_warning_sent_at' => null,
             ]);
+
+            app(WebhookService::class)->trigger(WebhookEvent::SERVER_UNSUSPENDED, WebhookService::serverPayload($this));
         }
 
 

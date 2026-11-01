@@ -115,6 +115,11 @@ class PermissionGroups
         'admin.useful_links.write'
     ];
 
+    const WEBHOOKS_PERMISSIONS = [
+        'admin.webhooks.read',
+        'admin.webhooks.write'
+    ];
+
     const PAYMENTS_PERMISSIONS = [
         'admin.payments.read',
         'admin.payments.write'

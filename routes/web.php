@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\TicketsController as AdminTicketsController;
 use App\Http\Controllers\Admin\UsefulLinkController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VoucherController;
+use App\Http\Controllers\Admin\WebhookController;
 use App\Http\Controllers\Admin\CouponController;
 use App\Http\Controllers\Auth\SocialiteController;
 use App\Http\Controllers\HomeController;
@@ -201,6 +202,11 @@ Route::middleware(['auth', 'checkSuspended', 'two_factor.required'])->group(func
         //usefullinks
         Route::get('usefullinks/datatable', [UsefulLinkController::class, 'datatable'])->name('usefullinks.datatable');
         Route::resource('usefullinks', UsefulLinkController::class);
+
+        //webhooks
+        Route::get('webhooks/datatable', [WebhookController::class, 'datatable'])->name('webhooks.datatable');
+        Route::post('webhooks/{webhook}/test', [WebhookController::class, 'test'])->name('webhooks.test');
+        Route::resource('webhooks', WebhookController::class)->except(['show']);
 
         //vouchers
         Route::get('vouchers/datatable', [VoucherController::class, 'datatable'])->name('vouchers.datatable');

@@ -8,9 +8,11 @@ use App\Models\TicketBlacklist;
 use App\Models\TicketCategory;
 use App\Models\TicketComment;
 use App\Models\User;
+use App\Enums\WebhookEvent;
 use App\Notifications\Ticket\Admin\AdminCreateNotification;
 use App\Notifications\Ticket\Admin\AdminReplyNotification;
 use App\Notifications\Ticket\User\CreateNotification;
+use App\Services\WebhookService;
 use App\Settings\GeneralSettings;
 use App\Settings\LocaleSettings;
 use App\Settings\PterodactylSettings;
@@ -78,6 +80,11 @@ class TicketsController extends Controller
         );
         $ticket->save();
         $user = Auth::user();
+
+        app(WebhookService::class)->trigger(WebhookEvent::TICKET_CREATED, array_merge(
+            WebhookService::ticketPayload($ticket),
+            ['user' => WebhookService::userPayload($user)]
+        ));
 
         $staffNotify = User::permission('admin.tickets.get_notification')->get();
         foreach($staffNotify as $staff){

@@ -16,9 +16,11 @@ use App\Settings\UserSettings;
 use App\Settings\ServerSettings;
 use App\Services\ServerCreationService;
 use App\Services\ServerUpgradeService;
+use App\Services\WebhookService;
 use App\Settings\PterodactylSettings;
 use App\Classes\PterodactylClient;
 use App\Enums\BillingPriority;
+use App\Enums\WebhookEvent;
 use App\Exceptions\Pterodactyl\PterodactylException;
 use App\Exceptions\Server\ServerException;
 use App\Exceptions\Server\ServerUpgradeException;
@@ -589,6 +591,9 @@ class ServerController extends Controller
             }
 
             $this->processUpgrade($server, $oldProduct, $newProduct, $user);
+
+            app(WebhookService::class)->trigger(WebhookEvent::SERVER_UPDATED, WebhookService::serverPayload($server->fresh()));
+
             return redirect()->route('servers.show', ['server' => $server->id])
                 ->with('success', __('Server Successfully Upgraded'));
         } catch (Exception $e) {

@@ -5,7 +5,9 @@ namespace App\Models;
 use App\Notifications\Auth\QueuedVerifyEmail;
 use App\Notifications\WelcomeMessage;
 use App\Classes\PterodactylClient;
+use App\Enums\WebhookEvent;
 use App\Facades\Currency;
+use App\Services\WebhookService;
 use App\Settings\PterodactylSettings;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -110,6 +112,12 @@ class User extends Authenticatable implements MustVerifyEmail
 
         static::created(function (User $user) {
             $user->notify(new WelcomeMessage($user));
+
+            app(WebhookService::class)->trigger(WebhookEvent::USER_CREATED, WebhookService::userPayload($user));
+        });
+
+        static::deleted(function (User $user) {
+            app(WebhookService::class)->trigger(WebhookEvent::USER_DELETED, WebhookService::userPayload($user));
         });
 
         static::deleting(function (User $user) {
@@ -296,6 +304,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'suspended' => true,
         ]);
 
+        app(WebhookService::class)->trigger(WebhookEvent::USER_SUSPENDED, WebhookService::userPayload($this));
+
         return $this;
     }
 
@@ -310,6 +320,8 @@ class User extends Authenticatable implements MustVerifyEmail
         $this->update([
             'suspended' => false,
         ]);
+
+        app(WebhookService::class)->trigger(WebhookEvent::USER_UNSUSPENDED, WebhookService::userPayload($this));
 
         return $this;
     }
